@@ -1,0 +1,42 @@
+package com.kvi.osquio.data
+
+import com.kvi.osquio.BuildConfig
+import com.kvi.osquio.data.model.Rsvp
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.from
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
+object RsvpRepository {
+
+    private val httpClient = HttpClient(OkHttp)
+
+    suspend fun rsvpsForSummon(summonId: String): List<Rsvp> =
+        supabase.from("rsvps").select {
+            filter { eq("summon_id", summonId) }
+        }.decodeList<Rsvp>()
+
+    suspend fun upsertRsvp(summonId: String, userId: String, response: String, responseTime: String?) {
+        val token = supabase.auth.currentSessionOrNull()?.accessToken ?: return
+        val body = buildJsonObject {
+            put("summon_id", summonId)
+            put("user_id", userId)
+            put("response", response)
+            if (responseTime != null) put("response_time", responseTime)
+        }
+        httpClient.post("${BuildConfig.SUPABASE_URL}/functions/v1/validate-rsvp") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(body.toString())
+        }
+    }
+
+    suspend fun refreshForSummon(summonId: String): List<Rsvp> = rsvpsForSummon(summonId)
+}

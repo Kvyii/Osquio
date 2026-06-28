@@ -1,0 +1,23 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/google-services.json
+
+# Build outputs
+app/build/
+
+# Supabase local dev
+supabase/.temp/
+
+# Crash dumps
+*.hprof
+
+# Claude Code session data
+.claude/
