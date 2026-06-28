@@ -12,7 +12,7 @@ val supabase = createSupabaseClient(
     supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
 ) {
     install(Auth) {
-        autoRefreshToken = true
+        alwaysAutoRefresh = true
     }
     install(Postgrest)
     install(Realtime)
