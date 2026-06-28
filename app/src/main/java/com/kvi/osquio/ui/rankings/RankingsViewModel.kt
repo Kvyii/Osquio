@@ -17,7 +17,8 @@ import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneOffset
 
-data class Badge(val iconRes: Int, val name: String, val holder: User?, val detail: String)
+data class RankedEntry(val rank: Int, val user: User, val detail: String)
+data class Badge(val iconRes: Int, val name: String, val holder: User?, val detail: String, val podium: List<RankedEntry> = emptyList())
 
 sealed interface RankingsUiState {
     data object Loading : RankingsUiState
@@ -44,6 +45,21 @@ class RankingsViewModel : ViewModel() {
                 _state.value = RankingsUiState.Error(e.message ?: "Failed to load rankings")
             }
         }
+    }
+
+    private fun <T> buildPodium(sorted: List<Map.Entry<User, T>>, format: (Map.Entry<User, T>) -> String): List<RankedEntry> {
+        val result = mutableListOf<RankedEntry>()
+        var rank = 1
+        var i = 0
+        while (i < sorted.size && result.size < 3) {
+            val currentVal = sorted[i].value
+            val group = sorted.drop(i).takeWhile { it.value == currentVal }
+            group.forEach { result.add(RankedEntry(rank, it.key, format(it))) }
+            rank += group.size
+            i += group.size
+            if (rank > 3) break
+        }
+        return result
     }
 
     fun setFilter(thisMonth: Boolean) {
@@ -106,34 +122,73 @@ class RankingsViewModel : ViewModel() {
             .filter { it.value.isNotEmpty() }
             .minByOrNull { it.value.average() }
 
+        fun <T : Comparable<T>> topThreeDescending(
+            map: Map<User, T>,
+            format: (T) -> String,
+            minValue: T,
+        ): List<RankedEntry> {
+            val sorted = map.entries.filter { it.value > minValue }.sortedByDescending { it.value }
+            return buildPodium(sorted) { format(it.value) }
+        }
+
+        val summonsPodium = topThreeDescending(summonsSent, { "$it beacons sent" }, 0)
+        val attendedPodium = topThreeDescending(attended, { "$it 'yes' responses" }, 0)
+        val ignoredPodium = topThreeDescending(ignored, { "$it ignored beacons" }, 0)
+        val rejectedPodium = topThreeDescending(rejected, { "$it 'no' responses" }, 0)
+        val fastestPodium = run {
+            val sorted = responseTimes.entries
+                .filter { it.value.isNotEmpty() }
+                .map { it.key to it.value.average().toLong() }
+                .sortedBy { it.second }
+            val result = mutableListOf<RankedEntry>()
+            var rank = 1
+            var i = 0
+            while (i < sorted.size && result.size < 3) {
+                val currentVal = sorted[i].second
+                val group = sorted.drop(i).takeWhile { it.second == currentVal }
+                group.forEach { (user, avg) ->
+                    result.add(RankedEntry(rank, user, "${avg / 60}m ${avg % 60}s avg response time"))
+                }
+                rank += group.size
+                i += group.size
+                if (rank > 3) break
+            }
+            result
+        }
+
         val badges = listOf(
             Badge(
                 R.drawable.rune_double_damage, "Most Beacons",
                 summonsSent.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key,
-                summonsSent.maxByOrNull { it.value }?.let { "${it.value} summons" } ?: "No data",
+                summonsSent.maxByOrNull { it.value }?.let { "${it.value} beacons sent" } ?: "No data",
+                summonsPodium,
             ),
             Badge(
                 R.drawable.rune_haste, "Fastest Responder",
                 fastestResponder?.key,
                 fastestResponder?.let {
                     val avg = it.value.average().toLong()
-                    "${avg / 60}m ${avg % 60}s avg"
+                    "${avg / 60}m ${avg % 60}s avg response time"
                 } ?: "No data",
+                fastestPodium,
             ),
             Badge(
                 R.drawable.rune_regeneration, "Top Attendance",
                 attended.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key,
-                attended.maxByOrNull { it.value }?.let { "${it.value} games" } ?: "No data",
+                attended.maxByOrNull { it.value }?.let { "${it.value} 'yes' responses" } ?: "No data",
+                attendedPodium,
             ),
             Badge(
                 R.drawable.rune_invisibility, "Biggest Ghost",
                 ignored.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key,
-                ignored.maxByOrNull { it.value }?.let { "${it.value} ignored" } ?: "No data",
+                ignored.maxByOrNull { it.value }?.let { "${it.value} ignored beacons" } ?: "No data",
+                ignoredPodium,
             ),
             Badge(
                 R.drawable.rune_water, "Biggest Chud",
                 rejected.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key,
-                rejected.maxByOrNull { it.value }?.let { "${it.value} no's" } ?: "No data",
+                rejected.maxByOrNull { it.value }?.let { "${it.value} 'no' responses" } ?: "No data",
+                rejectedPodium,
             ),
         )
 
