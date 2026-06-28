@@ -95,11 +95,13 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
                             AppTheme.MIDNIGHT -> "Midnight"
                             AppTheme.TWILIGHT -> "Twilight"
                             AppTheme.DAWN -> "Dawn"
+                            AppTheme.SPONKE -> "Sponke"
                         }
                         FilterChip(
                             selected = ThemeManager.current == theme,
                             onClick = { vm.setTheme(theme) },
-                            label = { Text(label) },
+                            label = { Text(label, maxLines = 1) },
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
@@ -197,7 +199,10 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
             )) { append("GitHub") }
             pop()
         }
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             ClickableText(
                 text = linkText,
                 style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
@@ -205,6 +210,12 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
                     linkText.getStringAnnotations("URL", offset, offset)
                         .firstOrNull()?.let { uriHandler.openUri(it.item) }
                 },
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "See an error or bug? Screenshot and send to Kv",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
         }
     }

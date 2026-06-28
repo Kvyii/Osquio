@@ -128,6 +128,13 @@ private fun SummonCreationContent(
             ) {
                 Text("Beacon!")
             }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Please use this responsibly.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 }
@@ -244,6 +251,7 @@ private fun LobbyContent(
 
     if (showTimePickerForYesAt) {
         YesAtTimePicker(
+            gameInstant = gameInstant,
             onConfirm = { time -> onRsvp("yes_at_time", time); showTimePickerForYesAt = false },
             onDismiss = { showTimePickerForYesAt = false },
         )
@@ -289,11 +297,15 @@ private fun UserRow(user: User) {
 
 @Composable
 private fun YesAtTimePicker(
+    gameInstant: Instant?,
     onConfirm: (Instant) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val now = Instant.now()
-    val steps = (5..60 step 5).toList()
+    val maxMinutes = if (gameInstant != null) {
+        ((gameInstant.epochSecond - now.epochSecond) / 60).toInt().coerceIn(5, 60)
+    } else 60
+    val steps = (5..maxMinutes step 5).toList().ifEmpty { listOf(5) }
     var selectedOffset by remember { mutableStateOf(steps.first()) }
 
     AlertDialog(
@@ -308,14 +320,14 @@ private fun YesAtTimePicker(
                     value = steps.indexOf(selectedOffset).toFloat(),
                     onValueChange = { selectedOffset = steps[it.toInt()] },
                     valueRange = 0f..(steps.size - 1).toFloat(),
-                    steps = steps.size - 2,
+                    steps = (steps.size - 2).coerceAtLeast(0),
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text("5 min", style = MaterialTheme.typography.labelSmall)
-                    Text("60 min", style = MaterialTheme.typography.labelSmall)
+                    Text("$maxMinutes min", style = MaterialTheme.typography.labelSmall)
                 }
             }
         },

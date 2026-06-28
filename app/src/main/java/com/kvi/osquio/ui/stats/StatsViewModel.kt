@@ -23,6 +23,7 @@ data class UserStats(
     val accepted: Int,
     val rejected: Int,
     val ignored: Int,
+    val isDeceased: Boolean = false,
 )
 
 sealed interface StatsUiState {
@@ -68,6 +69,8 @@ class StatsViewModel : ViewModel() {
             }
         } else allHistory
 
+        val chronological = filtered.sortedBy { it.closedAt }
+
         val stats = allUsers.map { user ->
             val sent = filtered.count { it.summonerId == user.id }
             var accepted = 0; var rejected = 0; var ignored = 0
@@ -88,13 +91,31 @@ class StatsViewModel : ViewModel() {
                     ignored++
                 }
             }
-            UserStats(user, sent, accepted, rejected, ignored)
+
+            var ignoreStreak = 0
+            for (history in chronological.asReversed()) {
+                val respondents = history.snapshot["respondents"] as? JsonArray ?: break
+                val nonRespondents = history.snapshot["non_respondents"] as? JsonArray ?: break
+                val inNonRespondents = nonRespondents.any {
+                    it.jsonObject["user_id"]?.jsonPrimitive?.content == user.id
+                }
+                if (inNonRespondents) {
+                    ignoreStreak++
+                } else {
+                    val responded = respondents.any {
+                        it.jsonObject["user_id"]?.jsonPrimitive?.content == user.id
+                    }
+                    if (responded) break
+                }
+            }
+
+            UserStats(user, sent, accepted, rejected, ignored, isDeceased = ignoreStreak >= 10)
         }
         val sorted = stats.sortedWith(
             compareByDescending<UserStats> { it.summonsSent }
                 .thenByDescending { it.accepted }
-                .thenBy { it.rejected }
                 .thenBy { it.ignored }
+                .thenBy { it.rejected }
                 .thenBy { it.user.displayName }
         )
         _state.value = StatsUiState.Loaded(sorted, isThisMonth)

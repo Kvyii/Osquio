@@ -8,13 +8,13 @@
   <img src="https://img.shields.io/badge/notifications-FCM-FFCA28?logo=firebase&logoColor=black" />
 </p>
 
-A closed-group Android app for getting your Dota 2 squad together. Someone calls a game, everyone gets a push notification, and you can see in real time who's in and who's ghosting.
+A closed-group Android app for getting the Dota 2 squad together. Someone calls a game, everyone gets a push notification, and you can see in real time who's in and who's ghosting.
 
 ---
 
 ## What it does
 
-Osquio kills the "anyone down for Dota?" message chain. One person calls a game time, a loud push notification goes out to the whole group, and everyone taps their response. A live lobby shows who's in and who hasn't answered yet.
+One person calls a game time, a loud push notification goes out to the whole group, and everyone taps their response. A live lobby shows who's in and who hasn't answered yet.
 
 **Five tabs:**
 
@@ -34,13 +34,13 @@ Osquio kills the "anyone down for Dota?" message chain. One person calls a game 
 ## Features
 
 ### Beacon
-Any group member can call a game up to 2 hours out. Quick-fill buttons for 15 min, 30 min, and 1 hour, or pick a custom time.
+Any group member can call a game up. Quick-fill buttons for 15 min, 30 min, and 1 hour.
 
 ### Push notifications
 Everyone gets an FCM notification the second a beacon goes out — loud, high-priority, fires even when the app is closed.
 
 ### RSVP
-Three options: **Yes**, **No**, or **Yes at [time]**. The "Yes at time" picker uses 5-minute increments. You can change your answer any time before the beacon closes.
+Three options: **Yes**, **No**, or **Yes at [time]**. You can change your answer any time before the beacon closes.
 
 ### Live lobby
 The lobby updates live via Supabase Realtime websockets — see who's in, who said no, and who still hasn't responded.
