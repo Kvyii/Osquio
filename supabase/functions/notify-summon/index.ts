@@ -20,7 +20,13 @@ async function getFcmAccessToken(): Promise<string> {
 }
 
 Deno.serve(async (req) => {
-  const { record } = await req.json()
+  const { record, old_record, type } = await req.json()
+
+  // Webhook updates (cancel/expire) include old_record — skip them
+  // Rebeacon calls from the app pass user_id and never include old_record
+  if (old_record != null) {
+    return new Response(JSON.stringify({ ok: true, skipped: true }), { status: 200 })
+  }
 
   const summonerId = record.user_id ?? record.created_by
 
