@@ -48,6 +48,7 @@ class SummonViewModel : ViewModel() {
     private var realtimeJob: Job? = null
     private var cooldownJob: Job? = null
     private var rebeaconTickJob: Job? = null
+    private var expiryJob: Job? = null
     private var activeSummonId: String? = null
 
     private var rebeaconCount = 0
@@ -93,6 +94,26 @@ class SummonViewModel : ViewModel() {
             LobbyState(summon, summoner, rsvps, allUsers, config)
         )
         subscribeToRealtime(summon.id, config)
+        startExpiryTimer(summon, config)
+    }
+
+    private fun startExpiryTimer(summon: Summon, config: Config) {
+        expiryJob?.cancel()
+        val gameTime = runCatching { Instant.parse(summon.gameTime) }.getOrNull() ?: return
+        val delayMs = gameTime.toEpochMilli() - System.currentTimeMillis()
+        if (delayMs <= 0L) {
+            activeSummonId = null
+            _state.value = SummonUiState.NoActiveSummon(config)
+            return
+        }
+        expiryJob = viewModelScope.launch {
+            delay(delayMs)
+            val current = _state.value
+            if (current is SummonUiState.ActiveLobby && current.lobby.summon.id == summon.id) {
+                activeSummonId = null
+                _state.value = SummonUiState.NoActiveSummon(config)
+            }
+        }
     }
 
     private fun subscribeToRealtime(summonId: String, config: Config) {
@@ -150,6 +171,7 @@ class SummonViewModel : ViewModel() {
                 SummonRepository.cancelSummon(summonId, currentUser.id)
                 activeSummonId = null
                 rebeaconTickJob?.cancel()
+                expiryJob?.cancel()
                 val config = ConfigRepository.getConfig()
                 val freshUser = runCatching { UserRepository.currentUser() }.getOrElse { currentUser }
                 val cooldown = cooldownSecondsRemaining(freshUser)
@@ -244,5 +266,6 @@ class SummonViewModel : ViewModel() {
         realtimeJob?.cancel()
         cooldownJob?.cancel()
         rebeaconTickJob?.cancel()
+        expiryJob?.cancel()
     }
 }

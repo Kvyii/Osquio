@@ -56,7 +56,7 @@ class RankingsViewModel : ViewModel() {
         val filtered = if (isThisMonth) {
             allHistory.filter { h ->
                 runCatching {
-                    val t = OffsetDateTime.parse(h.closedAt).withOffsetSameInstant(ZoneOffset.UTC)
+                    val t = OffsetDateTime.parse(h.closedAt).atZoneSameInstant(java.time.ZoneId.systemDefault())
                     YearMonth.of(t.year, t.month) == thisMonth
                 }.getOrDefault(false)
             }
@@ -115,7 +115,10 @@ class RankingsViewModel : ViewModel() {
             Badge(
                 R.drawable.rune_haste, "Fastest Responder",
                 fastestResponder?.key,
-                fastestResponder?.let { "${(it.value.average() / 60).toInt()} min avg" } ?: "No data",
+                fastestResponder?.let {
+                    val avg = it.value.average().toLong()
+                    "${avg / 60}m ${avg % 60}s avg"
+                } ?: "No data",
             ),
             Badge(
                 R.drawable.rune_regeneration, "Top Attendance",

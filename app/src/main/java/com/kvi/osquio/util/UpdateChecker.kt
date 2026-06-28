@@ -44,6 +44,23 @@ class UpdateChecker(
         }
     }
 
+    suspend fun fetchReleaseNotes(version: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val tag = "v$version"
+            val url = "https://api.github.com/repos/$repoOwner/$repoName/releases/tags/$tag"
+            val request = Request.Builder()
+                .url(url)
+                .header("Accept", "application/vnd.github+json")
+                .build()
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) return@withContext null
+            val json = JSONObject(response.body!!.string())
+            json.optString("body").takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun downloadAndInstall(context: Context, downloadUrl: String, onProgress: (Int) -> Unit) =
         withContext(Dispatchers.IO) {
             val request = Request.Builder().url(downloadUrl).build()

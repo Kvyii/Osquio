@@ -11,7 +11,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
-enum class AppTheme { MIDNIGHT, TWILIGHT, DAWN }
+enum class AppTheme { MIDNIGHT, TWILIGHT, DAWN, SPONKE }
 
 // Pure black OLED theme — Dota crimson accents
 private val MidnightColors = darkColorScheme(
@@ -67,6 +67,26 @@ private val DawnColors = lightColorScheme(
     outlineVariant = Color(0xFFE8D5D4),
 )
 
+// Childish bubblegum pink light theme
+private val SponkeColors = lightColorScheme(
+    background = Color(0xFFFFF0F5),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFFFE4EF),
+    onBackground = Color(0xFF4A1530),
+    onSurface = Color(0xFF4A1530),
+    onSurfaceVariant = Color(0xFFB06080),
+    primary = Color(0xFFE91E8C),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFFFD6EA),
+    onPrimaryContainer = Color(0xFF5C0030),
+    secondary = Color(0xFFFF6BB5),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFFFD6EA),
+    onSecondaryContainer = Color(0xFF5C0030),
+    outline = Color(0xFFFFB3D4),
+    outlineVariant = Color(0xFFFFD6EA),
+)
+
 object ThemeManager {
     var current by mutableStateOf(AppTheme.DAWN)
 }
@@ -79,6 +99,7 @@ fun OsquioTheme(content: @Composable () -> Unit) {
         AppTheme.MIDNIGHT -> MidnightColors
         AppTheme.TWILIGHT -> TwilightColors
         AppTheme.DAWN -> DawnColors
+        AppTheme.SPONKE -> SponkeColors
     }
     CompositionLocalProvider(LocalAppTheme provides ThemeManager.current) {
         MaterialTheme(colorScheme = colors, content = content)

@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.OffsetDateTime
-import java.time.ZoneOffset
+import java.time.ZoneId
 
 sealed interface HistoryUiState {
     data object Loading : HistoryUiState
@@ -43,7 +43,7 @@ class HistoryViewModel : ViewModel() {
     fun selectDay(date: LocalDate) {
         val dayHistory = allHistory.filter { h ->
             runCatching {
-                val d = OffsetDateTime.parse(h.gameTime).withOffsetSameInstant(ZoneOffset.UTC).toLocalDate()
+                val d = OffsetDateTime.parse(h.gameTime).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
                 d == date
             }.getOrDefault(false)
         }
@@ -69,7 +69,7 @@ class HistoryViewModel : ViewModel() {
         val perDay = mutableMapOf<LocalDate, Int>()
         allHistory.forEach { h ->
             runCatching {
-                val d = OffsetDateTime.parse(h.gameTime).withOffsetSameInstant(ZoneOffset.UTC).toLocalDate()
+                val d = OffsetDateTime.parse(h.gameTime).atZoneSameInstant(ZoneId.systemDefault()).toLocalDate()
                 perDay[d] = (perDay[d] ?: 0) + 1
             }
         }

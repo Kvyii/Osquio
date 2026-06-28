@@ -11,8 +11,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -92,11 +95,24 @@ private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp) {
         Spacer(Modifier.width(10.dp))
         // Right side: name on top, numbers on bottom
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                stat.user.displayName,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            if (stat.isDeceased) {
+                Text(
+                    buildAnnotatedString {
+                        append(stat.user.displayName)
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Normal)) {
+                            append(" (deceased)")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else {
+                Text(
+                    stat.user.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
                 listOf(stat.summonsSent, stat.accepted, stat.rejected, stat.ignored).forEach { value ->
