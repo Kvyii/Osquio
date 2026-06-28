@@ -1,11 +1,16 @@
 package com.kvi.osquio
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import com.kvi.osquio.R
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -32,6 +37,10 @@ import java.time.temporal.ChronoUnit
 
 class MainActivity : ComponentActivity() {
 
+    @Suppress("InvalidFragmentVersionForActivityResult")
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -40,6 +49,16 @@ class MainActivity : ComponentActivity() {
             }
         }
         lifecycleScope.launch { checkForUpdate() }
+        requestNotificationPermissionIfNeeded()
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 
     override fun onResume() {

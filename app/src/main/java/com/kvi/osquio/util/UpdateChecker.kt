@@ -41,8 +41,9 @@ class UpdateChecker(
     }
 
     private fun isUpdateAvailable(current: String, latest: String): Boolean {
-        val c = current.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
-        val l = latest.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+        val numericPart = Regex("""^[\d.]+""")
+        val c = (numericPart.find(current.removePrefix("v"))?.value ?: "0").split(".").map { it.toIntOrNull() ?: 0 }
+        val l = (numericPart.find(latest.removePrefix("v"))?.value ?: "0").split(".").map { it.toIntOrNull() ?: 0 }
         for (i in 0..2) {
             val diff = (l.getOrElse(i) { 0 }) - (c.getOrElse(i) { 0 })
             if (diff != 0) return diff > 0

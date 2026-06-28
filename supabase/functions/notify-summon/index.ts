@@ -22,10 +22,17 @@ async function getFcmAccessToken(): Promise<string> {
 Deno.serve(async (req) => {
   const { record } = await req.json()
 
+  const { data: summoner } = await supabase
+    .from('users')
+    .select('display_name')
+    .eq('id', record.user_id)
+    .single()
+
   const { data: users, error } = await supabase
     .from('users')
-    .select('fcm_token, display_name')
+    .select('fcm_token')
     .not('fcm_token', 'is', null)
+    .neq('id', record.user_id)
 
   if (error) {
     console.error('Failed to fetch users:', error)
@@ -55,17 +62,14 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         message: {
           token: user.fcm_token,
-          notification: {
-            title: '🎮 Dota summon!',
-            body: `Game called for ${gameTime}. You in?`,
-          },
           android: {
             priority: 'high',
           },
           data: {
             type: 'summon',
             summon_id: record.id,
-            game_time: record.game_time,
+            game_time: gameTime,
+            summoner_name: summoner?.display_name ?? 'Someone',
           },
         },
       }),
