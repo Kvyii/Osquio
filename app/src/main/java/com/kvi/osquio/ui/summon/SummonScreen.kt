@@ -224,14 +224,14 @@ private fun LobbyContent(
             val rebeaconCooldown = lobby.rebeaconCooldownSeconds
             val rebeaconExhausted = lobby.rebeaconUsedInWindow >= 5
             val rebeaconLabel = when {
-                rebeaconExhausted -> "Re-beacon (limit reached)"
-                rebeaconCooldown > 0L -> "Re-beacon (${rebeaconCooldown}s)"
+                !currentUser.isAdmin && rebeaconExhausted -> "Re-beacon (limit reached)"
+                !currentUser.isAdmin && rebeaconCooldown > 0L -> "Re-beacon (${rebeaconCooldown}s)"
                 else -> "Re-beacon"
             }
             OutlinedButton(
                 onClick = onRebeacon,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = rebeaconCooldown <= 0L && !rebeaconExhausted,
+                enabled = currentUser.isAdmin || (rebeaconCooldown <= 0L && !rebeaconExhausted),
             ) { Text(rebeaconLabel) }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
