@@ -8,10 +8,12 @@
 .externalNativeBuild
 .cxx
 local.properties
+keystore
 app/google-services.json
 
 # Build outputs
 app/build/
+app/release/
 
 # Supabase local dev
 supabase/.temp/

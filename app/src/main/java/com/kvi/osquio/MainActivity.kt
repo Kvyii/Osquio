@@ -21,10 +21,12 @@ import com.kvi.osquio.data.supabase
 import com.kvi.osquio.ui.MainNavGraph
 import com.kvi.osquio.ui.auth.LoginScreen
 import com.kvi.osquio.ui.theme.OsquioTheme
+import com.google.firebase.messaging.FirebaseMessaging
 import com.kvi.osquio.util.SteamApi
 import com.kvi.osquio.util.UpdateChecker
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -70,6 +72,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+suspend fun registerFcmToken(user: User) {
+    try {
+        val token = FirebaseMessaging.getInstance().token.await()
+        UserRepository.updateFcmToken(user.id, token)
+    } catch (_: Exception) {}
+}
+
 suspend fun refreshSteamIfNeeded(user: User) {
     val allUsers = try { UserRepository.allUsers() } catch (_: Exception) { return }
     for (u in allUsers) {
@@ -95,6 +104,7 @@ private fun AppRoot() {
             try {
                 val user = UserRepository.currentUser()
                 currentUser = user
+                registerFcmToken(user)
                 refreshSteamIfNeeded(user)
             } catch (_: Exception) {
                 supabase.auth.signOut()
@@ -116,6 +126,7 @@ private fun AppRoot() {
                 kotlinx.coroutines.MainScope().launch {
                     val user = UserRepository.currentUser()
                     currentUser = user
+                    registerFcmToken(user)
                     refreshSteamIfNeeded(user)
                 }
             }
