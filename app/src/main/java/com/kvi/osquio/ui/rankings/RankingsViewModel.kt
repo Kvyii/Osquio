@@ -84,7 +84,9 @@ class RankingsViewModel : ViewModel() {
                 val response = r.jsonObject["response"]?.jsonPrimitive?.content
                 when (response) {
                     "no" -> rejected[user] = (rejected[user] ?: 0) + 1
-                    "yes", "yes_at_time" -> attended[user] = (attended[user] ?: 0) + 1
+                    "yes", "yes_at_time" -> if (uid != history.summonerId) {
+                        attended[user] = (attended[user] ?: 0) + 1
+                    }
                 }
                 val respondedAt = r.jsonObject["responded_at"]?.jsonPrimitive?.content
                 val createdAt = history.createdAt

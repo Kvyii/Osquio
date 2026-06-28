@@ -26,7 +26,7 @@ android {
 
         buildConfigField("String", "SUPABASE_URL", "\"${localProperties["SUPABASE_URL"] ?: ""}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProperties["SUPABASE_ANON_KEY"] ?: ""}\"")
-        buildConfigField("String", "GITHUB_REPO_OWNER", "\"kvii\"")
+        buildConfigField("String", "GITHUB_REPO_OWNER", "\"Kvyii\"")
         buildConfigField("String", "GITHUB_REPO_NAME", "\"Osquio\"")
     }
 

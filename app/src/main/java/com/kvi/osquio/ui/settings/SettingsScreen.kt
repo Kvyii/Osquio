@@ -25,6 +25,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kvi.osquio.data.model.User
 import com.kvi.osquio.ui.theme.AppTheme
 import com.kvi.osquio.ui.theme.ThemeManager
+import com.kvi.osquio.ui.settings.UpdateState
 
 @Composable
 fun SettingsScreen(currentUser: User, onSignOut: () -> Unit, vm: SettingsViewModel = viewModel()) {
@@ -168,6 +169,21 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
         ) { Text("Sign out") }
+
+        // Update button
+        val updateState = state.updateState
+        OutlinedButton(
+            onClick = { vm.checkAndInstallUpdate() },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = updateState is UpdateState.Idle || updateState is UpdateState.UpToDate,
+        ) {
+            Text(when (updateState) {
+                is UpdateState.Idle -> "Check for update"
+                is UpdateState.Checking -> "Checking..."
+                is UpdateState.Downloading -> "Downloading... ${updateState.progress}%"
+                is UpdateState.UpToDate -> "Up to date"
+            })
+        }
 
         // About
         val uriHandler = LocalUriHandler.current
