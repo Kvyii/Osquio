@@ -44,7 +44,7 @@ fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
             lobby = s.lobby,
             currentUser = currentUser,
             onCancel = { vm.cancelSummon(s.lobby.summon.id, currentUser) },
-            onRebeacon = { vm.rebeacon(s.lobby.summon.id) },
+            onRebeacon = { vm.rebeacon(s.lobby.summon.id, currentUser.isAdmin) },
             onRsvp = { response, responseTime ->
                 vm.submitRsvp(s.lobby.summon.id, currentUser.id, response, responseTime)
             },
@@ -166,21 +166,28 @@ private fun LobbyContent(
 
         Spacer(Modifier.height(16.dp))
         if (currentUser.id != summon.createdBy) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val myResponse = myRsvp?.response
-                Button(
-                    onClick = { onRsvp("yes", null) },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    enabled = myResponse != "yes",
-                ) { Text("Yes") }
-                OutlinedButton(
-                    onClick = { onRsvp("no", null) },
-                    enabled = myResponse != "no",
-                ) { Text("No") }
-                OutlinedButton(
-                    onClick = { showTimePickerForYesAt = true },
-                    enabled = myResponse != "yes_at_time",
-                ) { Text("Yes at...") }
+            val myResponse = myRsvp?.response
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                    Triple("yes", "Yes", { onRsvp("yes", null) }),
+                    Triple("no", "No", { onRsvp("no", null) }),
+                    Triple("yes_at_time", "Yes at...", { showTimePickerForYesAt = true }),
+                ).forEach { (response, label, action) ->
+                    if (myResponse == response) {
+                        Button(
+                            onClick = {},
+                            modifier = Modifier.weight(1f),
+                        ) { Text(label) }
+                    } else {
+                        OutlinedButton(
+                            onClick = action,
+                            modifier = Modifier.weight(1f),
+                        ) { Text(label) }
+                    }
+                }
             }
         }
         if (myRsvp != null) {

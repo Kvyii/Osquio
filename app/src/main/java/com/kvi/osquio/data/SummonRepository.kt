@@ -1,7 +1,14 @@
 package com.kvi.osquio.data
 
 import com.kvi.osquio.data.model.Summon
+import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 
 object SummonRepository {
 
@@ -40,10 +47,20 @@ object SummonRepository {
     }
 
     suspend fun triggerRebeacon(summonId: String) {
-        supabase.from("summons").update({
-            set("rebeacon_at", java.time.Instant.now().toString())
-        }) {
+        val summon = supabase.from("summons").select {
             filter { eq("id", summonId) }
+        }.decodeSingle<Summon>()
+
+        val body = buildJsonObject {
+            putJsonObject("record") {
+                put("id", summon.id)
+                put("game_time", summon.gameTime)
+            }
+        }
+
+        supabase.functions.invoke("notify-summon") {
+            contentType(ContentType.Application.Json)
+            setBody(body.toString())
         }
     }
 }

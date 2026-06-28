@@ -161,14 +161,16 @@ class SummonViewModel : ViewModel() {
         }
     }
 
-    fun rebeacon(summonId: String) {
+    fun rebeacon(summonId: String, isAdmin: Boolean = false) {
         val now = Instant.now()
         if (now.epochSecond - rebeaconWindowStart.epochSecond > 15 * 60) {
             rebeaconCount = 0
             rebeaconWindowStart = now
         }
-        val secsSinceLast = lastRebeaconAt?.let { now.epochSecond - it.epochSecond } ?: Long.MAX_VALUE
-        if (secsSinceLast < 60 || rebeaconCount >= 5) return
+        if (!isAdmin) {
+            val secsSinceLast = lastRebeaconAt?.let { now.epochSecond - it.epochSecond } ?: Long.MAX_VALUE
+            if (secsSinceLast < 60 || rebeaconCount >= 5) return
+        }
 
         viewModelScope.launch {
             try {
@@ -214,6 +216,7 @@ class SummonViewModel : ViewModel() {
     }
 
     private fun cooldownSecondsRemaining(user: User): Long {
+        if (user.isAdmin) return 0L
         val cooldownUntil = user.cooldownUntil ?: return 0L
         return try {
             val until = OffsetDateTime.parse(cooldownUntil).toInstant()

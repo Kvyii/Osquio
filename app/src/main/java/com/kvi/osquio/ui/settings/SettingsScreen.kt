@@ -174,7 +174,7 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
         val uriHandler = LocalUriHandler.current
         val githubUrl = "https://github.com/Kvyii/Osquio"
         val linkText = buildAnnotatedString {
-            append("v0.1.1 beta  •  ")
+            append("v0.1.2 beta  •  ")
             pushStringAnnotation(tag = "URL", annotation = githubUrl)
             withStyle(SpanStyle(
                 color = MaterialTheme.colorScheme.primary,
