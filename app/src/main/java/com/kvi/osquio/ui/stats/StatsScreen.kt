@@ -50,23 +50,21 @@ fun StatsScreen(vm: StatsViewModel = viewModel()) {
                 }
                 Spacer(Modifier.height(16.dp))
                 val avatarSize = 56.dp
-                LazyColumn {
-                    item {
-                        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-                            Spacer(Modifier.width(avatarSize + 10.dp))
-                            listOf("Sent", "Yes", "No", "Ignored").forEach { label ->
-                                Text(
-                                    label,
-                                    modifier = Modifier.weight(1f),
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        }
-                        HorizontalDivider()
+                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                    Spacer(Modifier.width(avatarSize + 10.dp))
+                    listOf("Sent", "Yes", "No", "Ignored").forEach { label ->
+                        Text(
+                            label,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold,
+                        )
                     }
+                }
+                HorizontalDivider()
+                LazyColumn {
                     items(s.stats) { stat ->
                         StatsRow(stat, avatarSize)
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
