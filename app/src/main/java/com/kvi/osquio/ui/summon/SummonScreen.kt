@@ -242,9 +242,8 @@ private fun LobbyContent(
         }
     }
 
-    if (showTimePickerForYesAt && gameInstant != null) {
+    if (showTimePickerForYesAt) {
         YesAtTimePicker(
-            gameTime = gameInstant,
             onConfirm = { time -> onRsvp("yes_at_time", time); showTimePickerForYesAt = false },
             onDismiss = { showTimePickerForYesAt = false },
         )
@@ -290,39 +289,34 @@ private fun UserRow(user: User) {
 
 @Composable
 private fun YesAtTimePicker(
-    gameTime: Instant,
     onConfirm: (Instant) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val now = Instant.now()
-    val maxMinutesFromNow = ((gameTime.epochSecond - now.epochSecond) / 60).toInt().coerceAtLeast(0)
-    var selectedOffset by remember { mutableStateOf(0) }
-
-    val quickOptions = listOf(15, 30, 60).filter { it <= maxMinutesFromNow }
+    val steps = (5..60 step 5).toList()
+    var selectedOffset by remember { mutableStateOf(steps.first()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Yes at what time?") },
         text = {
             Column {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    quickOptions.forEach { mins ->
-                        FilterChip(
-                            selected = selectedOffset == mins,
-                            onClick = { selectedOffset = mins },
-                            label = { Text("+$mins min") },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
                 val targetInstant = now.plusSeconds(selectedOffset * 60L)
                 Text("I'll be ready at ${timeFmt.format(targetInstant)}")
+                Spacer(Modifier.height(8.dp))
                 Slider(
-                    value = selectedOffset.toFloat(),
-                    onValueChange = { selectedOffset = (it / 5).toInt() * 5 },
-                    valueRange = 0f..maxMinutesFromNow.toFloat(),
-                    steps = (maxMinutesFromNow / 5).coerceAtLeast(1),
+                    value = steps.indexOf(selectedOffset).toFloat(),
+                    onValueChange = { selectedOffset = steps[it.toInt()] },
+                    valueRange = 0f..(steps.size - 1).toFloat(),
+                    steps = steps.size - 2,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("5 min", style = MaterialTheme.typography.labelSmall)
+                    Text("60 min", style = MaterialTheme.typography.labelSmall)
+                }
             }
         },
         confirmButton = {

@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.kvi.osquio.data.RsvpRepository
+import com.kvi.osquio.data.SummonEvents
 import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.ui.beacon.BeaconAlertActivity
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +32,9 @@ class MyFirebaseService : FirebaseMessagingService() {
                 serviceScope.launch {
                     RsvpRepository.refreshForSummon(summonId)
                 }
+            }
+            "summon_closed" -> {
+                SummonEvents.notifyClosed()
             }
             else -> {
                 val summonId = message.data["summon_id"]
