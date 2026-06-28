@@ -55,6 +55,7 @@ object SummonRepository {
             putJsonObject("record") {
                 put("id", summon.id)
                 put("game_time", summon.gameTime)
+                put("user_id", summon.createdBy)
             }
         }
 
