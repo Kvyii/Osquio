@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kvi.osquio.data.ConfigRepository
 import com.kvi.osquio.data.RsvpRepository
-import com.kvi.osquio.data.SummonEvents
 import com.kvi.osquio.data.SummonRepository
 import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.data.model.Config
@@ -69,18 +68,6 @@ class SummonViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 _state.value = SummonUiState.Error(e.message ?: "Unknown error")
-            }
-        }
-        viewModelScope.launch {
-            SummonEvents.summonClosed.collect {
-                activeSummonId = null
-                rebeaconTickJob?.cancel()
-                val config = ((_state.value as? SummonUiState.ActiveLobby)?.lobby?.config)
-                    ?: runCatching { ConfigRepository.getConfig() }.getOrNull()
-                    ?: return@collect
-                val cooldown = cooldownSecondsRemaining(currentUser)
-                _state.value = SummonUiState.NoActiveSummon(config, cooldown)
-                startCooldownTick(currentUser, config)
             }
         }
     }
