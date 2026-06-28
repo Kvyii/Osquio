@@ -1,13 +1,19 @@
 package com.kvi.osquio.ui.rankings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -43,29 +49,80 @@ fun RankingsScreen(vm: RankingsViewModel = viewModel()) {
 
 @Composable
 private fun BadgeCard(badge: Badge) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painter = painterResource(badge.iconRes),
-                contentDescription = badge.name,
-                modifier = Modifier.size(48.dp),
-                tint = androidx.compose.ui.graphics.Color.Unspecified,
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(badge.name, style = MaterialTheme.typography.titleMedium)
-                if (badge.holder != null) {
-                    Text(badge.holder.displayName, style = MaterialTheme.typography.bodyLarge)
-                    Text(badge.detail, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    Text(badge.detail, style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+    ) {
+        Column {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(badge.iconRes),
+                    contentDescription = badge.name,
+                    modifier = Modifier.size(48.dp),
+                    tint = androidx.compose.ui.graphics.Color.Unspecified,
+                )
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(badge.name, style = MaterialTheme.typography.titleMedium)
+                    if (badge.holder != null) {
+                        Text(badge.holder.displayName, style = MaterialTheme.typography.bodyLarge)
+                        Text(badge.detail, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Text(badge.detail, style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                badge.holder?.avatarUrl?.let { url ->
+                    AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(48.dp))
                 }
             }
-            badge.holder?.avatarUrl?.let { url ->
-                AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(48.dp))
+
+            AnimatedVisibility(visible = expanded) {
+                if (badge.podium.isEmpty()) {
+                    Text(
+                        "No data yet",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    )
+                } else {
+                    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                        HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
+                        badge.podium.forEach { entry ->
+                            PodiumRow(entry)
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun PodiumRow(entry: RankedEntry) {
+    val medal = when (entry.rank) {
+        1 -> "🥇"
+        2 -> "🥈"
+        3 -> "🥉"
+        else -> "${entry.rank}."
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(medal, style = MaterialTheme.typography.titleMedium, modifier = Modifier.width(36.dp))
+        entry.user.avatarUrl?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
+            )
+            Spacer(Modifier.width(8.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(entry.user.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(entry.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
