@@ -39,7 +39,7 @@ async function sendRsvpUpdateToAll(summonId: string, accessToken: string) {
           message: {
             token: user.fcm_token,
             data: {
-              type: 'rsvp_update',
+              type: 'summon_closed',
               summon_id: summonId,
             },
             android: {
