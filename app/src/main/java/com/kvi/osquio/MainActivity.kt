@@ -37,6 +37,7 @@ import java.time.temporal.ChronoUnit
 
 class MainActivity : ComponentActivity() {
 
+    @Suppress("InvalidFragmentVersionForActivityResult")
     private val requestNotificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 

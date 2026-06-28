@@ -80,6 +80,30 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
             }
         }
 
+        // Notifications
+        NotificationsCard()
+
+        // Theme picker
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Theme", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppTheme.entries.forEach { theme ->
+                        val label = when (theme) {
+                            AppTheme.MIDNIGHT -> "Midnight"
+                            AppTheme.TWILIGHT -> "Twilight"
+                            AppTheme.DAWN -> "Dawn"
+                        }
+                        FilterChip(
+                            selected = ThemeManager.current == theme,
+                            onClick = { vm.setTheme(theme) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+            }
+        }
 
         // Admin section
         if (state.currentUser.isAdmin) {
@@ -138,31 +162,6 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
             }
         }
 
-        // Theme picker
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Theme", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AppTheme.entries.forEach { theme ->
-                        val label = when (theme) {
-                            AppTheme.MIDNIGHT -> "Midnight"
-                            AppTheme.TWILIGHT -> "Twilight"
-                            AppTheme.DAWN -> "Dawn"
-                        }
-                        FilterChip(
-                            selected = ThemeManager.current == theme,
-                            onClick = { vm.setTheme(theme) },
-                            label = { Text(label) },
-                        )
-                    }
-                }
-            }
-        }
-
-        // Notifications
-        NotificationsCard()
-
         // Sign out
         OutlinedButton(
             onClick = { vm.signOut(); onSignOut() },
@@ -174,7 +173,7 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
         val uriHandler = LocalUriHandler.current
         val githubUrl = "https://github.com/Kvyii/Osquio"
         val linkText = buildAnnotatedString {
-            append("v0.1.2 beta  •  ")
+            append("v${com.kvi.osquio.BuildConfig.VERSION_NAME}  •  ")
             pushStringAnnotation(tag = "URL", annotation = githubUrl)
             withStyle(SpanStyle(
                 color = MaterialTheme.colorScheme.primary,
@@ -201,13 +200,25 @@ private fun NotificationsCard() {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Notifications", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    }
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Enable app notifications")
+            }
+            Spacer(Modifier.height(8.dp))
             Text(
                 "Enable alarm-style notifications to see a full-screen alert when a Beacon arrives, even when your phone is locked.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
                     val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
