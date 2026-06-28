@@ -20,7 +20,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.data.model.User
@@ -79,7 +84,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun checkForUpdate() {
-        val info = UpdateChecker().checkForUpdate(BuildConfig.VERSION_NAME) ?: return
+        val info = UpdateChecker().checkForUpdate(BuildConfig.VERSION_NAME.trim()) ?: return
         runOnUiThread {
             android.app.AlertDialog.Builder(this)
                 .setTitle("Update available — ${info.version}")
@@ -174,7 +179,7 @@ private fun AppRoot() {
         AlertDialog(
             onDismissRequest = { changelogNotes = null },
             title = { Text("What's new in v${BuildConfig.VERSION_NAME}") },
-            text = { Text(notes) },
+            text = { MarkdownText(notes) },
             confirmButton = {
                 TextButton(onClick = { changelogNotes = null }) { Text("Got it") }
             }
@@ -193,4 +198,57 @@ private fun AppRoot() {
             }
         )
     }
+}
+
+@Composable
+private fun MarkdownText(markdown: String) {
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        markdown.lines().forEach { line ->
+            when {
+                line.startsWith("## ") -> Text(
+                    line.removePrefix("## "),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = primary,
+                )
+                line.startsWith("# ") -> Text(
+                    line.removePrefix("# "),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = primary,
+                )
+                line.startsWith("- ") || line.startsWith("* ") -> {
+                    val content = line.drop(2)
+                    Text(
+                        buildAnnotatedString {
+                            append("• ")
+                            appendMarkdownInline(content, onSurface)
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                line.isBlank() -> Spacer(Modifier.height(4.dp))
+                else -> Text(
+                    buildAnnotatedString { appendMarkdownInline(line, onSurface) },
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+    }
+}
+
+private fun androidx.compose.ui.text.AnnotatedString.Builder.appendMarkdownInline(
+    text: String,
+    defaultColor: androidx.compose.ui.graphics.Color,
+) {
+    val boldRegex = Regex("""\*\*(.+?)\*\*""")
+    var last = 0
+    boldRegex.findAll(text).forEach { match ->
+        if (match.range.first > last) append(text.substring(last, match.range.first))
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(match.groupValues[1]) }
+        last = match.range.last + 1
+    }
+    if (last < text.length) append(text.substring(last))
 }
