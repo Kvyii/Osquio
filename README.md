@@ -80,6 +80,12 @@ On launch the app checks GitHub Releases for a newer APK and prompts a download 
 
 ---
 
+## Architecture
+
+For a detailed explanation of how the database, Edge Functions, FCM, Realtime, and Android layers fit together, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
 ## License
 
 GPL-3.0 — see [LICENSE](LICENSE) for details.
