@@ -22,17 +22,19 @@ async function getFcmAccessToken(): Promise<string> {
 Deno.serve(async (req) => {
   const { record } = await req.json()
 
+  const summonerId = record.user_id ?? record.created_by
+
   const { data: summoner } = await supabase
     .from('users')
     .select('display_name')
-    .eq('id', record.user_id)
+    .eq('id', summonerId)
     .single()
 
   const { data: users, error } = await supabase
     .from('users')
     .select('fcm_token')
     .not('fcm_token', 'is', null)
-    .neq('id', record.user_id)
+    .neq('id', summonerId)
 
   if (error) {
     console.error('Failed to fetch users:', error)
