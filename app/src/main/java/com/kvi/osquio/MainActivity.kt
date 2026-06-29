@@ -55,7 +55,7 @@ class MainActivity : ComponentActivity() {
                 AppRoot()
             }
         }
-        lifecycleScope.launch { checkForUpdate() }
+        if (savedInstanceState == null) lifecycleScope.launch { checkForUpdate() }
         requestNotificationPermissionIfNeeded()
     }
 
