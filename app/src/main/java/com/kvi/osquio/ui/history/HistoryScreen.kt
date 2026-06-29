@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
-import coil.compose.AsyncImage
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,13 +16,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.kvi.osquio.data.model.SummonHistory
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -34,8 +34,12 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val timeFmt = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
+private val timeFmt = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.systemDefault())
 private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault())
+
+private val colorYes = Color(0xFF2ECC40)
+private val colorYesAt = Color(0xFF6DBF7E)
+private val colorNo = Color(0xFFFF4136)
 
 @Composable
 fun HistoryScreen(onNavigateToSettings: () -> Unit = {}, vm: HistoryViewModel = viewModel()) {
@@ -49,9 +53,7 @@ fun HistoryScreen(onNavigateToSettings: () -> Unit = {}, vm: HistoryViewModel = 
             Text(s.message, color = MaterialTheme.colorScheme.error)
         }
         is HistoryUiState.Calendar -> when {
-            s.selectedSummon != null -> HistoryDetailScreen(s.selectedSummon, onBack = { vm.back() })
-            s.selectedDay != null -> HistoryDayScreen(s.selectedDay, s.dayDetail,
-                onSelect = { vm.selectSummon(it) }, onBack = { vm.back() })
+            s.selectedDay != null -> HistoryDayScreen(s.selectedDay, s.dayDetail, onBack = { vm.back() })
             else -> CalendarView(s.summonsPerDay, onSelectDay = { vm.selectDay(it) }, onNavigateToSettings = onNavigateToSettings)
         }
     }
@@ -89,9 +91,7 @@ private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (Local
         val daysInMonth = displayMonth.lengthOfMonth()
         val startOffset = (firstDay.dayOfWeek.value % 7)
         val cells = List(startOffset) { null } + (1..daysInMonth).map { firstDay.withDayOfMonth(it) }
-        val totalRows = ((cells.size + 6) / 7)
 
-        // Day-of-week header
         Row(modifier = Modifier.fillMaxWidth()) {
             listOf("S", "M", "T", "W", "T", "F", "S").forEach { label ->
                 Text(
@@ -104,7 +104,6 @@ private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (Local
             }
         }
 
-        // Grid body fills remaining space
         val crimson = MaterialTheme.colorScheme.primary
         val maxCount = summonsPerDay.entries
             .filter { it.key.month == displayMonth.month && it.key.year == displayMonth.year }
@@ -172,30 +171,69 @@ private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (Local
 }
 
 @Composable
-private fun HistoryDayScreen(
-    day: LocalDate,
-    summons: List<SummonHistory>,
-    onSelect: (SummonHistory) -> Unit,
-    onBack: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+private fun HistoryDayScreen(day: LocalDate, summons: List<SummonHistory>, onBack: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, bottom = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Text(dateFmt.format(day.atStartOfDay(ZoneId.systemDefault())),
-                style = MaterialTheme.typography.headlineSmall)
+            Text(dateFmt.format(day.atStartOfDay(ZoneId.systemDefault())), style = MaterialTheme.typography.headlineSmall)
         }
         Spacer(Modifier.height(8.dp))
         if (summons.isEmpty()) {
-            Text("No summons on this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(Modifier.fillMaxSize(), Alignment.Center) {
+                Text("No beacons on this day.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         } else {
-            LazyColumn {
-                items(summons) { summon ->
-                    ListItem(
-                        headlineContent = { Text("Game at ${timeFmt.format(Instant.parse(summon.gameTime))}") },
-                        supportingContent = { Text(summon.status.replaceFirstChar { it.uppercase() }) },
-                        modifier = Modifier.clickable { onSelect(summon) },
-                    )
-                    HorizontalDivider()
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                items(summons) { summon -> BeaconCard(summon) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BeaconCard(summon: SummonHistory) {
+    val respondents = runCatching { summon.snapshot["respondents"]?.jsonArray }.getOrNull() ?: return
+
+    val timeLabel = timeFmt.format(Instant.parse(summon.gameTime))
+    val status = summon.status.replaceFirstChar { it.uppercase() }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Beacon at $timeLabel", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Summoner first
+                val summonerEntry = respondents.map { it.jsonObject }
+                    .firstOrNull { it["user_id"]?.jsonPrimitive?.content == summon.summonerId }
+                ResponseAvatar(
+                    avatarUrl = summonerEntry?.get("avatar_url")?.jsonPrimitive?.content,
+                    tintColor = null,
+                    borderColor = colorYes,
+                    borderWidth = 2.5.dp,
+                )
+
+                Spacer(Modifier.width(4.dp))
+
+                val responseOrder = listOf("yes", "yes_at_time", "no")
+                val others = respondents
+                    .map { it.jsonObject }
+                    .filter { it["user_id"]?.jsonPrimitive?.content != summon.summonerId }
+                    .sortedBy { r -> responseOrder.indexOf(r["response"]?.jsonPrimitive?.content).takeIf { it >= 0 } ?: Int.MAX_VALUE }
+
+                others.forEach { r ->
+                    val avatarUrl = r["avatar_url"]?.jsonPrimitive?.content
+                    val response = r["response"]?.jsonPrimitive?.content ?: return@forEach
+                    val tint = when (response) {
+                        "yes" -> colorYes.copy(alpha = 0.55f)
+                        "yes_at_time" -> colorYesAt.copy(alpha = 0.55f)
+                        "no" -> colorNo.copy(alpha = 0.75f)
+                        else -> return@forEach
+                    }
+                    ResponseAvatar(avatarUrl = avatarUrl, tintColor = tint)
                 }
             }
         }
@@ -203,69 +241,26 @@ private fun HistoryDayScreen(
 }
 
 @Composable
-private fun HistoryDetailScreen(summon: SummonHistory, onBack: () -> Unit) {
-    val respondents = summon.snapshot["respondents"] as? JsonArray ?: return
-    val nonRespondents = summon.snapshot["non_respondents"] as? JsonArray ?: return
-
-    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Text("Summon detail", style = MaterialTheme.typography.headlineSmall)
-        }
-        Spacer(Modifier.height(8.dp))
-        Text("Game time: ${timeFmt.format(Instant.parse(summon.gameTime))}")
-        Text("Status: ${summon.status.replaceFirstChar { it.uppercase() }}")
-        Spacer(Modifier.height(16.dp))
-
-        Text("Responses", style = MaterialTheme.typography.titleSmall)
-        LazyColumn {
-            items(respondents.size) { i ->
-                val r = respondents[i].jsonObject
-                val name = r["display_name"]?.jsonPrimitive?.content ?: "?"
-                val avatarUrl = r["avatar_url"]?.jsonPrimitive?.content
-                val response = r["response"]?.jsonPrimitive?.content ?: "?"
-                val responseTime = r["response_time"]?.jsonPrimitive?.content
-                ListItem(
-                    headlineContent = { Text(name) },
-                    supportingContent = {
-                        val label = when (response) {
-                            "yes" -> "Yes"
-                            "no" -> "No"
-                            "yes_at_time" -> "Yes at ${responseTime?.let { timeFmt.format(Instant.parse(it)) } ?: "?"}"
-                            else -> response
-                        }
-                        Text(label)
-                    },
-                    leadingContent = {
-                        AsyncImage(
-                            model = avatarUrl,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp).clip(CircleShape),
-                        )
-                    }
-                )
-            }
-            if (nonRespondents.isNotEmpty()) {
-                item {
-                    Text("No response", style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(vertical = 8.dp))
-                }
-                items(nonRespondents.size) { i ->
-                    val nr = nonRespondents[i].jsonObject
-                    val name = nr["display_name"]?.jsonPrimitive?.content ?: "?"
-                    val avatarUrl = nr["avatar_url"]?.jsonPrimitive?.content
-                    ListItem(
-                        headlineContent = { Text(name) },
-                        leadingContent = {
-                            AsyncImage(
-                                model = avatarUrl,
-                                contentDescription = null,
-                                modifier = Modifier.size(40.dp).clip(CircleShape),
-                            )
-                        }
-                    )
-                }
-            }
+private fun ResponseAvatar(
+    avatarUrl: String?,
+    tintColor: Color?,
+    borderColor: Color = Color.Transparent,
+    borderWidth: androidx.compose.ui.unit.Dp = 0.dp,
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .then(if (borderWidth > 0.dp) Modifier.border(borderWidth, borderColor, RoundedCornerShape(6.dp)) else Modifier),
+    ) {
+        AsyncImage(
+            model = avatarUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (tintColor != null) {
+            Box(modifier = Modifier.fillMaxSize().background(tintColor))
         }
     }
 }
