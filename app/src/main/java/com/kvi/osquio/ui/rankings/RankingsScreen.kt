@@ -4,7 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+
 
 @Composable
 fun RankingsScreen(onNavigateToSettings: () -> Unit = {}, vm: RankingsViewModel = viewModel()) {
@@ -44,8 +46,22 @@ fun RankingsScreen(onNavigateToSettings: () -> Unit = {}, vm: RankingsViewModel 
                     FilterChip(selected = !s.isThisMonth, onClick = { vm.setFilter(false) }, label = { Text("All Time") })
                 }
                 Spacer(Modifier.height(12.dp))
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(s.badges) { badge -> BadgeCard(badge) }
+                val listState = rememberLazyListState()
+                var expandedIndex by remember { mutableStateOf<Int?>(null) }
+                LaunchedEffect(expandedIndex) {
+                    expandedIndex?.let { index ->
+                        kotlinx.coroutines.delay(150)
+                        listState.animateScrollToItem(index)
+                    }
+                }
+                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    itemsIndexed(s.badges) { index, badge ->
+                        BadgeCard(
+                            badge = badge,
+                            expanded = expandedIndex == index,
+                            onToggle = { expandedIndex = if (expandedIndex == index) null else index },
+                        )
+                    }
                 }
             }
         }
@@ -53,11 +69,9 @@ fun RankingsScreen(onNavigateToSettings: () -> Unit = {}, vm: RankingsViewModel 
 }
 
 @Composable
-private fun BadgeCard(badge: Badge) {
-    var expanded by remember { mutableStateOf(false) }
-
+private fun BadgeCard(badge: Badge, expanded: Boolean, onToggle: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth().clickable { onToggle() },
     ) {
         Column {
             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {

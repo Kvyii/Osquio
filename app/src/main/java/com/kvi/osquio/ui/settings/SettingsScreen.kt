@@ -105,7 +105,7 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
                         FilterChip(
                             selected = ThemeManager.current == theme,
                             onClick = { vm.setTheme(theme) },
-                            label = { Text(label, maxLines = 1) },
+                            label = { Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                             modifier = Modifier.weight(1f),
                         )
                     }
