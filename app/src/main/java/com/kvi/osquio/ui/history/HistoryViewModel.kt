@@ -17,7 +17,6 @@ sealed interface HistoryUiState {
         val summonsPerDay: Map<LocalDate, Int>,
         val selectedDay: LocalDate? = null,
         val dayDetail: List<SummonHistory> = emptyList(),
-        val selectedSummon: SummonHistory? = null,
     ) : HistoryUiState
     data class Error(val message: String) : HistoryUiState
 }
@@ -48,21 +47,12 @@ class HistoryViewModel : ViewModel() {
             }.getOrDefault(false)
         }
         val current = _state.value as? HistoryUiState.Calendar ?: return
-        _state.value = current.copy(selectedDay = date, dayDetail = dayHistory, selectedSummon = null)
-    }
-
-    fun selectSummon(summon: SummonHistory) {
-        val current = _state.value as? HistoryUiState.Calendar ?: return
-        _state.value = current.copy(selectedSummon = summon)
+        _state.value = current.copy(selectedDay = date, dayDetail = dayHistory)
     }
 
     fun back() {
         val current = _state.value as? HistoryUiState.Calendar ?: return
-        if (current.selectedSummon != null) {
-            _state.value = current.copy(selectedSummon = null)
-        } else {
-            _state.value = current.copy(selectedDay = null, dayDetail = emptyList())
-        }
+        _state.value = current.copy(selectedDay = null, dayDetail = emptyList())
     }
 
     private fun buildCalendar() {

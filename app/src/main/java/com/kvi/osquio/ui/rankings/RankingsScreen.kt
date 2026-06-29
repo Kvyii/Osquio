@@ -4,8 +4,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,14 +21,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 
+
 @Composable
-fun RankingsScreen(vm: RankingsViewModel = viewModel()) {
+fun RankingsScreen(onNavigateToSettings: () -> Unit = {}, vm: RankingsViewModel = viewModel()) {
     val state by vm.state.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
 
     Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-        Text("Rankings", style = MaterialTheme.typography.headlineSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Rankings", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+        }
         Spacer(Modifier.height(8.dp))
 
         when (val s = state) {
@@ -39,8 +46,22 @@ fun RankingsScreen(vm: RankingsViewModel = viewModel()) {
                     FilterChip(selected = !s.isThisMonth, onClick = { vm.setFilter(false) }, label = { Text("All Time") })
                 }
                 Spacer(Modifier.height(12.dp))
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(s.badges) { badge -> BadgeCard(badge) }
+                val listState = rememberLazyListState()
+                var expandedIndex by remember { mutableStateOf<Int?>(null) }
+                LaunchedEffect(expandedIndex) {
+                    expandedIndex?.let { index ->
+                        kotlinx.coroutines.delay(150)
+                        listState.animateScrollToItem(index)
+                    }
+                }
+                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    itemsIndexed(s.badges) { index, badge ->
+                        BadgeCard(
+                            badge = badge,
+                            expanded = expandedIndex == index,
+                            onToggle = { expandedIndex = if (expandedIndex == index) null else index },
+                        )
+                    }
                 }
             }
         }
@@ -48,11 +69,9 @@ fun RankingsScreen(vm: RankingsViewModel = viewModel()) {
 }
 
 @Composable
-private fun BadgeCard(badge: Badge) {
-    var expanded by remember { mutableStateOf(false) }
-
+private fun BadgeCard(badge: Badge, expanded: Boolean, onToggle: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth().clickable { onToggle() },
     ) {
         Column {
             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
