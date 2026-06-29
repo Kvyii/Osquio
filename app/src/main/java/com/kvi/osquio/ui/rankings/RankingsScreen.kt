@@ -42,7 +42,7 @@ fun RankingsScreen(onNavigateToSettings: () -> Unit = {}, vm: RankingsViewModel 
             }
             is RankingsUiState.Loaded -> {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = s.isThisMonth, onClick = { vm.setFilter(true) }, label = { Text("This Month") })
+                    FilterChip(selected = s.isThisMonth, onClick = { vm.setFilter(true) }, label = { Text("Last 30 Days") })
                     FilterChip(selected = !s.isThisMonth, onClick = { vm.setFilter(false) }, label = { Text("All Time") })
                 }
                 Spacer(Modifier.height(12.dp))

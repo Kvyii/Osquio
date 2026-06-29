@@ -13,8 +13,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
 import java.time.OffsetDateTime
-import java.time.YearMonth
 import java.time.ZoneOffset
 
 data class UserStats(
@@ -59,12 +59,11 @@ class StatsViewModel : ViewModel() {
     }
 
     private fun recalculate() {
-        val thisMonth = YearMonth.now()
+        val thirtyDaysAgo = Instant.now().minusSeconds(30L * 24 * 60 * 60)
         val filtered = if (isThisMonth) {
             allHistory.filter { h ->
                 runCatching {
-                    val t = OffsetDateTime.parse(h.closedAt).withOffsetSameInstant(ZoneOffset.UTC)
-                    YearMonth.of(t.year, t.month) == thisMonth
+                    OffsetDateTime.parse(h.closedAt).toInstant().isAfter(thirtyDaysAgo)
                 }.getOrDefault(false)
             }
         } else allHistory
