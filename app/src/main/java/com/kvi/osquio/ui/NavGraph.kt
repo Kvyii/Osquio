@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -19,6 +20,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.kvi.osquio.data.model.User
 import com.kvi.osquio.ui.chat.ChatScreen
+import com.kvi.osquio.ui.chat.ChatViewModel
 import com.kvi.osquio.ui.history.HistoryScreen
 import com.kvi.osquio.ui.rankings.RankingsScreen
 import com.kvi.osquio.ui.settings.SettingsScreen
@@ -41,6 +43,10 @@ fun MainNavGraph(currentUser: User, onSignOut: () -> Unit) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    val chatVm: ChatViewModel = viewModel()
+    val hasUnread by chatVm.hasUnread.collectAsState()
+    LaunchedEffect(Unit) { chatVm.load() }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -54,7 +60,15 @@ fun MainNavGraph(currentUser: User, onSignOut: () -> Unit) {
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
+                        icon = {
+                            if (tab.route == "chat") {
+                                BadgedBox(badge = { if (hasUnread) Badge(containerColor = MaterialTheme.colorScheme.primary) }) {
+                                    Icon(tab.icon, contentDescription = tab.label)
+                                }
+                            } else {
+                                Icon(tab.icon, contentDescription = tab.label)
+                            }
+                        },
                         label = { Text(tab.label) },
                     )
                 }
@@ -78,7 +92,7 @@ fun MainNavGraph(currentUser: User, onSignOut: () -> Unit) {
             composable("stats") { StatsScreen(onNavigateToSettings = onGoToSettings) }
             composable("rankings") { RankingsScreen(onNavigateToSettings = onGoToSettings) }
             composable("history") { HistoryScreen(onNavigateToSettings = onGoToSettings) }
-            composable("chat") { ChatScreen(onNavigateToSettings = onGoToSettings) }
+            composable("chat") { ChatScreen(currentUser = currentUser, onNavigateToSettings = onGoToSettings, vm = chatVm) }
             composable("settings") { SettingsScreen(currentUser, onSignOut, onBack = onBackFromSettings) }
         }
     }
