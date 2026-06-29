@@ -24,7 +24,7 @@ One person calls a game time, a loud push notification goes out to the whole gro
 | Stats | Per-member stats visible to everyone |
 | Rankings | Live badge leaderboard |
 | History | Calendar view of all past beacons |
-| Settings | Admin controls and config |
+| Chat | Group chat for the squad |
 
 ![App screenshots](.github/assets/Readme1.png)
 ![App screenshots](.github/assets/Readme2.png)
@@ -60,6 +60,9 @@ Stats are filterable between **This Month** and **All Time**.
 
 ### History
 A calendar view of every past beacon. Tap a day to see what went down, tap a beacon to see the full breakdown — who said what, who ghosted, and when.
+
+### Chat
+A persistent group chat for the squad. Messages show avatars and timestamps; send from the bottom input bar.
 
 ### Steam profiles
 Display names and avatars are pulled from public Steam profile URLs — no API key needed. Profiles are cached in the database and refreshed every 7 days.
