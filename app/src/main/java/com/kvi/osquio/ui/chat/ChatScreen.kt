@@ -198,7 +198,10 @@ private fun MessageRow(
                 model = senderAvatarUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)),
+                modifier = Modifier
+                    .padding(bottom = 18.dp)
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp)),
             )
             Spacer(Modifier.width(8.dp))
         }
@@ -250,7 +253,10 @@ private fun MessageRow(
                 model = ownAvatarUrl,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)),
+                modifier = Modifier
+                    .padding(bottom = 18.dp)
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp)),
             )
         }
     }
