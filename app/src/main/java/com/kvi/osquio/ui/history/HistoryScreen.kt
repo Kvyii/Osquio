@@ -38,7 +38,7 @@ private val timeFmt = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.syst
 private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault())
 
 private val colorYes = Color(0xFF2ECC40)
-private val colorYesAt = Color(0xFF6DBF7E)
+private val colorYesAt = Color(0xFFFF8C00)
 private val colorNo = Color(0xFFFF4136)
 
 @Composable
@@ -233,7 +233,16 @@ private fun BeaconCard(summon: SummonHistory) {
                         "no" -> colorNo.copy(alpha = 0.75f)
                         else -> return@forEach
                     }
-                    ResponseAvatar(avatarUrl = avatarUrl, tintColor = tint)
+                    val label = if (response == "yes_at_time") {
+                        val responseTime = r["response_time"]?.jsonPrimitive?.content
+                        val createdAt = runCatching { Instant.parse(summon.createdAt) }.getOrNull()
+                        val readyAt = runCatching { responseTime?.let { Instant.parse(it) } }.getOrNull()
+                        if (createdAt != null && readyAt != null) {
+                            val mins = ((readyAt.epochSecond - createdAt.epochSecond) / 60).toInt().coerceAtLeast(0)
+                            "+$mins"
+                        } else null
+                    } else null
+                    ResponseAvatar(avatarUrl = avatarUrl, tintColor = tint, label = label)
                 }
             }
         }
@@ -246,12 +255,14 @@ private fun ResponseAvatar(
     tintColor: Color?,
     borderColor: Color = Color.Transparent,
     borderWidth: androidx.compose.ui.unit.Dp = 0.dp,
+    label: String? = null,
 ) {
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(RoundedCornerShape(6.dp))
             .then(if (borderWidth > 0.dp) Modifier.border(borderWidth, borderColor, RoundedCornerShape(6.dp)) else Modifier),
+        contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
             model = avatarUrl,
@@ -261,6 +272,14 @@ private fun ResponseAvatar(
         )
         if (tintColor != null) {
             Box(modifier = Modifier.fillMaxSize().background(tintColor))
+        }
+        if (label != null) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
         }
     }
 }
