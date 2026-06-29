@@ -5,6 +5,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,13 +23,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 
 @Composable
-fun StatsScreen(vm: StatsViewModel = viewModel()) {
+fun StatsScreen(onNavigateToSettings: () -> Unit = {}, vm: StatsViewModel = viewModel()) {
     val state by vm.state.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
 
     Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-        Text("Stats", style = MaterialTheme.typography.headlineSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Stats", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+        }
         Spacer(Modifier.height(8.dp))
 
         when (val s = state) {

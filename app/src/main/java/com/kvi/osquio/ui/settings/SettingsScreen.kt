@@ -5,6 +5,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +30,7 @@ import com.kvi.osquio.ui.theme.ThemeManager
 import com.kvi.osquio.ui.settings.UpdateState
 
 @Composable
-fun SettingsScreen(currentUser: User, onSignOut: () -> Unit, vm: SettingsViewModel = viewModel()) {
+fun SettingsScreen(currentUser: User, onSignOut: () -> Unit, onBack: () -> Unit = {}, vm: SettingsViewModel = viewModel()) {
     val state by vm.state.collectAsState()
 
     LaunchedEffect(currentUser.id) { vm.load(currentUser) }
@@ -38,12 +40,12 @@ fun SettingsScreen(currentUser: User, onSignOut: () -> Unit, vm: SettingsViewMod
         is SettingsUiState.Error -> Box(Modifier.fillMaxSize(), Alignment.Center) {
             Text(s.message, color = MaterialTheme.colorScheme.error)
         }
-        is SettingsUiState.Loaded -> SettingsContent(s, vm, onSignOut)
+        is SettingsUiState.Loaded -> SettingsContent(s, vm, onSignOut, onBack)
     }
 }
 
 @Composable
-private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel, onSignOut: () -> Unit) {
+private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel, onSignOut: () -> Unit, onBack: () -> Unit) {
     val scrollState = rememberScrollState()
     var cooldownSeconds by remember(state.config) { mutableStateOf(state.config.summonCooldownSeconds.toString()) }
     var maxAheadMinutes by remember(state.config) { mutableStateOf(state.config.maxSummonAheadMinutes.toString()) }
@@ -59,7 +61,10 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
         modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        }
 
         state.message?.let {
             Text(it, color = MaterialTheme.colorScheme.primary)

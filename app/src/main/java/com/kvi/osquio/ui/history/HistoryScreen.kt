@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +38,7 @@ private val timeFmt = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.syste
 private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault())
 
 @Composable
-fun HistoryScreen(vm: HistoryViewModel = viewModel()) {
+fun HistoryScreen(onNavigateToSettings: () -> Unit = {}, vm: HistoryViewModel = viewModel()) {
     val state by vm.state.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
@@ -51,19 +52,21 @@ fun HistoryScreen(vm: HistoryViewModel = viewModel()) {
             s.selectedSummon != null -> HistoryDetailScreen(s.selectedSummon, onBack = { vm.back() })
             s.selectedDay != null -> HistoryDayScreen(s.selectedDay, s.dayDetail,
                 onSelect = { vm.selectSummon(it) }, onBack = { vm.back() })
-            else -> CalendarView(s.summonsPerDay, onSelectDay = { vm.selectDay(it) })
+            else -> CalendarView(s.summonsPerDay, onSelectDay = { vm.selectDay(it) }, onNavigateToSettings = onNavigateToSettings)
         }
     }
 }
 
 @Composable
-private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (LocalDate) -> Unit) {
+private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (LocalDate) -> Unit, onNavigateToSettings: () -> Unit = {}) {
     var displayMonth by remember { mutableStateOf(YearMonth.now()) }
     val today = LocalDate.now()
 
     Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, bottom = 8.dp)) {
-        Text("History", style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(horizontal = 16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp)) {
+            Text("History", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+        }
         Spacer(Modifier.height(8.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically,
