@@ -13,9 +13,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
 import java.time.OffsetDateTime
-import java.time.YearMonth
-import java.time.ZoneOffset
 
 data class RankedEntry(val rank: Int, val user: User, val detail: String)
 data class Badge(val iconRes: Int, val name: String, val holder: User?, val detail: String, val podium: List<RankedEntry> = emptyList())
@@ -68,12 +67,11 @@ class RankingsViewModel : ViewModel() {
     }
 
     private fun recalculate() {
-        val thisMonth = YearMonth.now()
+        val thirtyDaysAgo = Instant.now().minusSeconds(30L * 24 * 60 * 60)
         val filtered = if (isThisMonth) {
             allHistory.filter { h ->
                 runCatching {
-                    val t = OffsetDateTime.parse(h.closedAt).atZoneSameInstant(java.time.ZoneId.systemDefault())
-                    YearMonth.of(t.year, t.month) == thisMonth
+                    OffsetDateTime.parse(h.closedAt).toInstant().isAfter(thirtyDaysAgo)
                 }.getOrDefault(false)
             }
         } else allHistory

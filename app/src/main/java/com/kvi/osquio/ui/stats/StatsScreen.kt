@@ -45,7 +45,7 @@ fun StatsScreen(onNavigateToSettings: () -> Unit = {}, vm: StatsViewModel = view
                     FilterChip(
                         selected = s.isThisMonth,
                         onClick = { vm.setFilter(true) },
-                        label = { Text("This Month") },
+                        label = { Text("Last 30 Days") },
                     )
                     FilterChip(
                         selected = !s.isThisMonth,
