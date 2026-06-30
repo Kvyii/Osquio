@@ -1,11 +1,13 @@
 package com.kvi.osquio.ui.stats
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +23,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault())
 
 @Composable
 fun StatsScreen(onNavigateToSettings: () -> Unit = {}, vm: StatsViewModel = viewModel()) {
@@ -55,23 +61,38 @@ fun StatsScreen(onNavigateToSettings: () -> Unit = {}, vm: StatsViewModel = view
                 }
                 Spacer(Modifier.height(16.dp))
                 val avatarSize = 56.dp
+                val columns = listOf("Sent" to StatColumn.SENT, "Yes" to StatColumn.YES, "No" to StatColumn.NO, "Ignored" to StatColumn.IGNORED)
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                     Spacer(Modifier.width(avatarSize + 10.dp))
-                    listOf("Sent", "Yes", "No", "Ignored").forEach { label ->
-                        Text(
-                            label,
-                            modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Bold,
-                        )
+                    columns.forEach { (label, column) ->
+                        val isActive = s.sortColumn == column
+                        Row(
+                            modifier = Modifier.weight(1f).clickable { vm.toggleSort(column) },
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                label,
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            if (isActive) {
+                                Icon(
+                                    imageVector = if (s.sortDirection == SortDirection.ASC) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
                     }
                 }
                 HorizontalDivider()
                 LazyColumn {
                     items(s.stats) { stat ->
-                        StatsRow(stat, avatarSize)
+                        StatsRow(stat, avatarSize, s.sortColumn)
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     }
                 }
@@ -81,22 +102,18 @@ fun StatsScreen(onNavigateToSettings: () -> Unit = {}, vm: StatsViewModel = view
 }
 
 @Composable
-private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp) {
+private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp, sortColumn: StatColumn?) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Tall rounded-square avatar spanning both name + stats rows
         AsyncImage(
             model = stat.user.avatarUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(avatarSize)
-                .clip(RoundedCornerShape(10.dp)),
+            modifier = Modifier.size(avatarSize).clip(RoundedCornerShape(10.dp)),
         )
         Spacer(Modifier.width(10.dp))
-        // Right side: name on top, numbers on bottom
         Column(modifier = Modifier.weight(1f)) {
             if (stat.isDeceased) {
                 Text(
@@ -109,6 +126,12 @@ private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp) {
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
+                val lastSeenLabel = if (stat.lastSeenAt != null) dateFmt.format(stat.lastSeenAt) else "never"
+                Text(
+                    "last seen $lastSeenLabel",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
             } else {
                 Text(
                     stat.user.displayName,
@@ -118,13 +141,19 @@ private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp) {
             }
             Spacer(Modifier.height(6.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
-                listOf(stat.summonsSent, stat.accepted, stat.rejected, stat.ignored).forEach { value ->
+                listOf(
+                    stat.summonsSent to StatColumn.SENT,
+                    stat.accepted to StatColumn.YES,
+                    stat.rejected to StatColumn.NO,
+                    stat.ignored to StatColumn.IGNORED,
+                ).forEach { (value, column) ->
                     Text(
                         value.toString(),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
+                        color = if (sortColumn == column) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }

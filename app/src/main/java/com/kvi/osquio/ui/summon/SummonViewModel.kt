@@ -15,6 +15,7 @@ import com.kvi.osquio.data.model.User
 import com.kvi.osquio.data.supabase
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -143,21 +144,49 @@ class SummonViewModel(app: Application) : AndroidViewModel(app) {
             launch {
                 channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "rsvps"
-                }.collect {
-                    val updated = RsvpRepository.rsvpsForSummon(summonId)
+                }.collect { action ->
                     val current = (_state.value as? SummonUiState.ActiveLobby)?.lobby ?: return@collect
-                    _state.value = SummonUiState.ActiveLobby(current.copy(rsvps = updated))
+                    val updatedRsvp = runCatching {
+                        when (action) {
+                            is PostgresAction.Insert -> action.decodeRecord<Rsvp>()
+                            is PostgresAction.Update -> action.decodeRecord<Rsvp>()
+                            else -> null
+                        }
+                    }.getOrNull()
+                    if (updatedRsvp != null) {
+                        val updatedRsvps = current.rsvps
+                            .filter { it.userId != updatedRsvp.userId }
+                            .plus(updatedRsvp)
+                        _state.value = SummonUiState.ActiveLobby(current.copy(rsvps = updatedRsvps))
+                    } else {
+                        val updated = RsvpRepository.rsvpsForSummon(summonId)
+                        _state.value = SummonUiState.ActiveLobby(current.copy(rsvps = updated))
+                    }
                 }
             }
 
             launch {
                 channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "summons"
-                }.collect {
-                    val summon = SummonRepository.activeSummon()
-                    if (summon == null) {
-                        activeSummonId = null
-                        _state.value = SummonUiState.NoActiveSummon(config)
+                }.collect { action ->
+                    val updatedSummon = runCatching {
+                        when (action) {
+                            is PostgresAction.Update -> action.decodeRecord<Summon>()
+                            is PostgresAction.Insert -> action.decodeRecord<Summon>()
+                            else -> null
+                        }
+                    }.getOrNull()
+                    if (updatedSummon != null) {
+                        if (updatedSummon.status != "open") {
+                            activeSummonId = null
+                            _state.value = SummonUiState.NoActiveSummon(config)
+                        }
+                    } else {
+                        val summon = SummonRepository.activeSummon()
+                        if (summon == null) {
+                            activeSummonId = null
+                            _state.value = SummonUiState.NoActiveSummon(config)
+                        }
                     }
                 }
             }
