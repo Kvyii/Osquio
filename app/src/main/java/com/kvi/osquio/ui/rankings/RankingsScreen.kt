@@ -62,6 +62,15 @@ fun RankingsScreen(onNavigateToSettings: () -> Unit = {}, vm: RankingsViewModel 
                             onToggle = { expandedIndex = if (expandedIndex == index) null else index },
                         )
                     }
+                    item {
+                        Text(
+                            "Tap a card to expand podium",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
