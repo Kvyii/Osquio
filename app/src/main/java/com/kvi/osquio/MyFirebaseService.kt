@@ -29,12 +29,6 @@ class MyFirebaseService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         when (message.data["type"]) {
-            "rsvp_update" -> {
-                val summonId = message.data["summon_id"] ?: return
-                serviceScope.launch {
-                    RsvpRepository.refreshForSummon(summonId)
-                }
-            }
             "mention" -> {
                 val isForegrounded = ProcessLifecycleOwner.get().lifecycle.currentState
                     .isAtLeast(Lifecycle.State.STARTED)

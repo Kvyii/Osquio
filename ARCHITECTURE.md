@@ -1,6 +1,6 @@
 # Osquio — Architecture
 
-This document explains how every major piece of the system fits together. It is structured as a series of layers — from database up to UI — followed by a walkthrough of the two most important end-to-end flows.
+This document explains how every major piece of the system fits together. It is structured as a series of layers — from database up to UI — followed by walkthroughs of the key end-to-end flows.
 
 ---
 
@@ -17,6 +17,10 @@ This document explains how every major piece of the system fits together. It is 
 9. [Steam integration](#9-steam-integration)
 10. [Auto-update](#10-auto-update)
 11. [End-to-end flows](#11-end-to-end-flows)
+    - [Calling a game](#calling-a-game)
+    - [Submitting an RSVP](#submitting-an-rsvp)
+    - [Sending a chat message with @mentions](#sending-a-chat-message-with-mentions)
+    - [Beacon closing](#beacon-closing)
 
 ---
 
@@ -134,6 +138,16 @@ Immutable archive created when a summon closes. The raw `summons`/`rsvps` tables
 
 History, stats, and rankings are all computed from these snapshots — not from live rsvps rows.
 
+#### `messages`
+Group chat messages. All users can read and insert.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `user_id` | UUID | FK → `users.id` |
+| `content` | text | Raw message text, including `@mentions` |
+| `created_at` | timestamptz | Server time of insert |
+
 #### `config`
 Single-row global settings table.
 
@@ -169,9 +183,8 @@ The Android client decides whether to show a notification based on whether the u
 **What it does:**
 1. Validates the request: summon exists, status is `open`, response value is legal, `yes_at_time` is before `game_time`.
 2. Upserts the `rsvps` row (unique on `summon_id + user_id`).
-3. Sends a silent FCM data message (`type = "rsvp_update"`) to all users so their live lobbies refresh.
 
-RSVP is routed through an Edge Function rather than direct Postgres insert so validation is enforced server-side — the Android client cannot bypass it.
+Clients see the update via Supabase Realtime — no FCM trigger needed. RSVP is routed through an Edge Function rather than direct Postgres insert so validation is enforced server-side; the Android client cannot bypass it.
 
 ### `close-summon`
 
@@ -182,7 +195,22 @@ RSVP is routed through an Edge Function rather than direct Postgres insert so va
 2. Computes `non_respondents` as all users minus those who have a row in `rsvps`.
 3. Inserts a row into `summon_history` with the frozen snapshot.
 4. If the summon was cancelled (not just expired), sets `cooldown_until` on the creator's `users` row.
-5. Sends a silent FCM `rsvp_update` to trigger a UI refresh on all devices.
+
+Clients learn of the close via the Realtime subscription on `summons` (status flips to `expired`/`cancelled`).
+
+### `notify-mention`
+
+**Triggered by:** HTTP POST from the Android app after a message containing @mentions is sent. Requires a valid user bearer token.
+
+**What it does:**
+1. Receives `{ message_id, sender_id, sender_name, mentioned_user_ids }`.
+2. If `mentioned_user_ids` is `["all"]`, fetches all users with a non-null `fcm_token` except the sender. Otherwise fetches only the specified user IDs.
+3. Exchanges the `FIREBASE_SERVICE_ACCOUNT` JSON for a short-lived OAuth2 access token.
+4. Sends a normal-priority FCM V1 **data message** (no `notification` block) to each device with:
+   - `type = "mention"`
+   - `sender_name`, `message_id`
+
+The Android client handles display: if foregrounded it refreshes the chat in-place; if backgrounded it shows a standard notification.
 
 ### `create-member`
 
@@ -213,15 +241,33 @@ Supabase Auth (email/password provider) is the identity layer.
 
 Supabase Realtime wraps Postgres logical replication and exposes it as a WebSocket channel. The Android app subscribes once an active summon is found.
 
-**Channel name:** `lobby-{summon_id}`
+The app uses two independent Realtime channels:
 
-**Tables monitored:** `rsvps`, `summons`
+### Lobby channel
 
-**Events:** INSERT, UPDATE, DELETE
+**Channel name:** `lobby-{summon_id}`  
+**Tables monitored:** `rsvps`, `summons`  
+**Events:** INSERT, UPDATE (DELETE ignored)
 
-When any change arrives, `SummonViewModel` re-fetches the current summon and all its rsvps from Postgres and rebuilds the UI state. The WebSocket event is purely a trigger — it does not carry the full payload.
+`SummonViewModel` runs two parallel `postgresChangeFlow` collectors on the same channel:
 
-This powers the live lobby: when someone on another device submits a response, every open lobby screen updates within seconds.
+**rsvps flow:** On INSERT or UPDATE, decodes the payload directly via `decodeRecord<Rsvp>()` and splices the updated row into the current rsvp list (replacing the existing row for that `userId`). Falls back to a full `rsvpsForSummon()` refetch only if decode fails.
+
+**summons flow:** On UPDATE or INSERT, decodes `decodeRecord<Summon>()`. If the summon's `status` is no longer `open`, transitions the UI to `NoActiveSummon`. Falls back to `SummonRepository.activeSummon()` refetch if decode fails.
+
+The lobby channel is created fresh per summon (`lobby-{summon_id}`) and the previous channel job is cancelled when a new summon is loaded. A local `activeSummonId` guard prevents duplicate subscriptions.
+
+**Client-side expiry timer:** In addition to Realtime, `SummonViewModel` starts a coroutine (`expiryJob`) that delays until `game_time` and then transitions to `NoActiveSummon` locally — covering the case where the Realtime event is missed.
+
+### Chat channel
+
+**Channel name:** `chat`  
+**Tables monitored:** `messages`  
+**Events:** INSERT
+
+On INSERT, `ChatViewModel` decodes the payload directly via `decodeRecord<Message>()` and appends the message to the list. If decode fails, it falls back to a full `getMessages()` refetch. Duplicate messages (same `id`, from optimistic append + Realtime firing) are skipped.
+
+Unlike the lobby channel, the chat channel is created once and never torn down — it is a singleton channel tied to `ChatViewModel`'s lifetime.
 
 ---
 
@@ -232,7 +278,7 @@ FCM is used for two distinct purposes:
 | Message type | `type` field | Visible to user? | Purpose |
 |---|---|---|---|
 | Beacon alert | `summon` | Yes — loud, full-screen | Notify group that a game is called |
-| Silent refresh | `rsvp_update` | No | Trigger live lobby reload |
+| Mention alert | `mention` | Yes if backgrounded, silent if foregrounded | Notify @mentioned users of a chat message |
 
 ### Token lifecycle
 
@@ -252,14 +298,27 @@ FCM is used for two distinct purposes:
    - Two quick-action buttons ("Yes", "No") backed by `PendingIntent` → `RsvpActionReceiver`
 5. On Android 14+ the user must explicitly grant `USE_FULL_SCREEN_INTENT` permission; Settings has a button that deep-links there.
 
-### Silent refresh flow
+### Chat realtime pipeline
 
-1. Edge Function (validate-rsvp or close-summon) sends FCM data message with `type = rsvp_update`.
-2. `MyFirebaseService` calls `refreshLobby()` — an internal broadcast or state push — which prompts `SummonViewModel` to re-fetch.
+Chat message delivery uses two parallel paths that together ensure messages appear instantly regardless of whether the user is in the app or not:
 
-### Notification channel
+**Path 1 — Supabase Realtime (primary, always active):**  
+`ChatViewModel` subscribes to the `chat` channel and receives a Postgres change event on every INSERT into `messages`. The payload is decoded directly via `decodeRecord<Message>()` and appended to the message list. This path fires for all users — senders and non-mentioned recipients alike.
 
-Android notification channels are configured once at channel creation time. Changing sound or vibration after first creation has no effect; the channel must be deleted (uninstall app) and recreated. Channel `beacon_alert_channel` is configured with `IMPORTANCE_HIGH`, the custom sound URI, and the vibration pattern.
+**Path 2 — FCM mention signal (supplement for @mentioned users):**  
+After sending a message with confirmed @mentions, the app POSTs to `notify-mention`. This sends an FCM data message (`type = mention`) to each mentioned user's device.
+
+- **If the recipient's app is foregrounded:** `MyFirebaseService` calls `ChatRepository.signalRefresh()`, emitting on a `MutableSharedFlow<Unit>`. `ChatViewModel`'s `listenForRefreshSignal()` collector triggers a full `getMessages()` refetch from Postgres. This was added to fix a race condition where the FCM message arrived and briefly disrupted the Realtime WebSocket connection, causing the new message to not appear until the app was restarted.
+- **If the recipient's app is backgrounded:** `MyFirebaseService` calls `showMentionNotification()`, posting a standard notification on the `mention_channel` Android channel (`IMPORTANCE_DEFAULT`, no custom sound, no full-screen intent). Tapping the notification opens `MainActivity` with `FLAG_ACTIVITY_CLEAR_TOP`.
+
+### Notification channels
+
+Android notification channels are configured once at channel-creation time. Changing sound or vibration after first creation has no effect; the channel must be deleted (uninstall app) and recreated.
+
+| Channel ID | Importance | Purpose |
+|---|---|---|
+| `beacon_alert_channel` | HIGH | Beacon alerts — custom sound, vibration, full-screen intent |
+| `mention_channel` | DEFAULT | @mention alerts — standard notification, no sound override |
 
 ---
 
@@ -288,6 +347,9 @@ UI / ViewModel
 | `RsvpRepository` | Submits RSVPs via `validate-rsvp` Edge Function; fetches rsvps by summon |
 | `HistoryRepository` | Reads `summon_history`; date-range filtering |
 | `ConfigRepository` | Reads and writes `config` |
+| `ChatRepository` | Reads/inserts `messages`; calls `notify-mention` Edge Function; exposes `refreshSignal` |
+
+**`ChatRepository.refreshSignal`** is a `MutableSharedFlow<Unit>` used as a cross-boundary signal: `MyFirebaseService` calls `signalRefresh()` when a `mention` FCM message arrives while the app is foregrounded, and `ChatViewModel` collects it to trigger an immediate Postgres refetch. This decouples the FCM service (which runs outside the ViewModel lifecycle) from the ViewModel without needing a broadcast or singleton state.
 
 **Data models** are `@Serializable` Kotlin data classes that map 1:1 to Postgres columns. Supabase Postgrest deserialises JSON into them automatically.
 
@@ -300,10 +362,11 @@ The app follows a standard MVVM pattern with Jetpack Compose.
 ```
 MainActivity
 └── NavGraph (bottom-bar navigation)
-    ├── SummonScreen  ← SummonViewModel
-    ├── StatsScreen   ← StatsViewModel
+    ├── SummonScreen   ← SummonViewModel
+    ├── ChatScreen     ← ChatViewModel
+    ├── StatsScreen    ← StatsViewModel
     ├── RankingsScreen ← RankingsViewModel
-    ├── HistoryScreen ← HistoryViewModel
+    ├── HistoryScreen  ← HistoryViewModel
     └── SettingsScreen ← SettingsViewModel
 
 BeaconAlertActivity  (full-screen, shown over lock screen)
@@ -311,7 +374,18 @@ BeaconAlertActivity  (full-screen, shown over lock screen)
 
 **ViewModels** hold a `MutableStateFlow<UiState>` where `UiState` is a sealed class with `Loading`, `Loaded`, and `Error` variants. Composables collect this flow and render accordingly.
 
-**Navigation** uses Jetpack Compose Navigation with five fixed bottom-bar routes. Auth state is managed in `MainActivity`: unauthenticated → `LoginScreen`; authenticated → `NavGraph`.
+**Navigation** uses Jetpack Compose Navigation with six fixed bottom-bar routes. Auth state is managed in `MainActivity`: unauthenticated → `LoginScreen`; authenticated → `NavGraph`.
+
+### Chat screen
+
+`ChatScreen` / `ChatViewModel` implement a group chat with @mention support:
+
+- **Realtime subscription:** `ChatViewModel` subscribes to `channel("chat")` Postgres changes on the `messages` table. On `INSERT`, it decodes the payload directly via `decodeRecord<Message>()` and appends to state. Duplicate messages (from optimistic append + Realtime firing) are deduplicated by `id`.
+- **Input field:** Uses `BasicTextField` with `TextFieldValue(AnnotatedString)` rather than `OutlinedTextField`. This allows the input to render confirmed @mentions as highlighted + bold inline spans (`SpanStyle` with background tint and `FontWeight.Bold`).
+- **@mention autocomplete:** Typing `@` followed by at least one letter shows a drop-up suggestion list filtered by `startsWith` on `displayName`. `@all` is always the first suggestion. Tapping a suggestion inserts the correctly-cased name and adds it to `confirmedMentions`.
+- **Confirmed mentions:** Tracked as a `Set<String>` in `ChatViewModel`. Only names selected from the dropdown are confirmed — free-typed `@text` never highlights or triggers notifications. The set is pruned as the user edits (names no longer present in the text are removed).
+- **Mention highlighting in bubbles:** `buildAnnotatedString` scans each message's content and wraps substrings that match any `displayName` (case-insensitive) or `"all"` with the same `SpanStyle`. The `style =` parameter on `Text` is used (not the `color =` parameter, which would override spans).
+- **Unread badge:** The bottom nav tab shows a badge dot when the latest message's `created_at` is newer than the timestamp stored in `SharedPreferences` under `chat_last_read_at`. The badge clears when the user opens Chat or sends a message.
 
 **Theme** — four themes (Midnight, Twilight, Dawn, Sponke) managed by `ThemeManager`, a singleton that persists the selection to `SharedPreferences`. Theme is applied at `OsquioApp` level so the entire Compose tree re-renders on change.
 
@@ -371,8 +445,8 @@ Each recipient's device:
           → Quick-action Yes/No buttons via RsvpActionReceiver
 
 Creator's device:
-  → SummonViewModel Realtime subscription fires
-      → Re-fetches summon + rsvps
+  → SummonViewModel Realtime subscription fires on each rsvps INSERT/UPDATE
+      → Decodes Rsvp from payload, splices into rsvp list
       → Lobby updates in real time as responses come in
 ```
 
@@ -384,13 +458,43 @@ User taps "Yes" (in BeaconAlertActivity, notification button, or lobby)
       → HTTP POST to validate-rsvp Edge Function (with auth JWT)
           → Validates: summon open, response valid
           → UPSERT into rsvps
-          → Sends silent FCM rsvp_update to all devices
 
 Each device with lobby open:
-  → MyFirebaseService receives rsvp_update
-      → Triggers lobby refresh in SummonViewModel
-          → Re-fetches rsvps
+  → Realtime WebSocket fires (rsvps INSERT/UPDATE on lobby-{summon_id} channel)
+      → SummonViewModel decodes Rsvp directly from payload
+          → Splices updated row into rsvp list
           → UI updates (new name appears in "Yes" column)
+```
+
+### Sending a chat message with @mentions
+
+```
+User types "@kv" → dropdown appears → taps "Kv"
+  → ChatViewModel.confirmMention("Kv")
+  → Input field rebuilds with highlighted @Kv span
+
+User taps Send
+  → ChatViewModel.sendMessage(userId, senderName, content)
+      → ChatRepository.sendMessage() — INSERT into messages { select() }
+          → Returns inserted Message with id
+      → Optimistically appends message to state
+      → markRead()
+      → Resolves confirmed mention names → user IDs (or ["all"])
+      → ChatRepository.notifyMentions(userId, senderName, message.id, mentionedIds)
+          → HTTP POST to notify-mention Edge Function (with bearer token)
+              → Fetches FCM tokens for mentioned users
+              → Sends FCM data message { type: "mention", sender_name, message_id }
+
+Recipient device (app foregrounded):
+  → MyFirebaseService receives type="mention"
+      → ChatRepository.signalRefresh() emits on refreshSignal flow
+          → ChatViewModel.listenForRefreshSignal() collects
+              → Re-fetches messages from Postgres
+              → New message appears in chat immediately
+
+Recipient device (app backgrounded):
+  → MyFirebaseService receives type="mention"
+      → showMentionNotification() — standard notification, opens MainActivity
 ```
 
 ### Beacon closing
@@ -404,7 +508,10 @@ Supabase webhook fires (summons UPDATE)
       → Joins rsvps + users → builds snapshot JSON
       → INSERT into summon_history (immutable archive)
       → If cancelled: UPDATE users SET cooldown_until = now() + cooldown_seconds
-      → Sends silent FCM rsvp_update → all lobbies dismiss
+
+Each device with lobby open:
+  → Realtime WebSocket fires (summons UPDATE)
+      → SummonViewModel sees status != 'open' → transitions to NoActiveSummon
 
 Stats, Rankings, and History are all derived from summon_history.snapshot
 ```
