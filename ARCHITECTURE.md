@@ -17,6 +17,10 @@ This document explains how every major piece of the system fits together. It is 
 9. [Steam integration](#9-steam-integration)
 10. [Auto-update](#10-auto-update)
 11. [End-to-end flows](#11-end-to-end-flows)
+    - [Calling a game](#calling-a-game)
+    - [Submitting an RSVP](#submitting-an-rsvp)
+    - [Sending a chat message with @mentions](#sending-a-chat-message-with-mentions)
+    - [Beacon closing](#beacon-closing)
 
 ---
 
@@ -134,6 +138,16 @@ Immutable archive created when a summon closes. The raw `summons`/`rsvps` tables
 
 History, stats, and rankings are all computed from these snapshots — not from live rsvps rows.
 
+#### `messages`
+Group chat messages. All users can read and insert.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | |
+| `user_id` | UUID | FK → `users.id` |
+| `content` | text | Raw message text, including `@mentions` |
+| `created_at` | timestamptz | Server time of insert |
+
 #### `config`
 Single-row global settings table.
 
@@ -184,6 +198,20 @@ RSVP is routed through an Edge Function rather than direct Postgres insert so va
 4. If the summon was cancelled (not just expired), sets `cooldown_until` on the creator's `users` row.
 5. Sends a silent FCM `rsvp_update` to trigger a UI refresh on all devices.
 
+### `notify-mention`
+
+**Triggered by:** HTTP POST from the Android app after a message containing @mentions is sent. Requires a valid user bearer token.
+
+**What it does:**
+1. Receives `{ message_id, sender_id, sender_name, mentioned_user_ids }`.
+2. If `mentioned_user_ids` is `["all"]`, fetches all users with a non-null `fcm_token` except the sender. Otherwise fetches only the specified user IDs.
+3. Exchanges the `FIREBASE_SERVICE_ACCOUNT` JSON for a short-lived OAuth2 access token.
+4. Sends a normal-priority FCM V1 **data message** (no `notification` block) to each device with:
+   - `type = "mention"`
+   - `sender_name`, `message_id`
+
+The Android client handles display: if foregrounded it refreshes the chat in-place; if backgrounded it shows a standard notification.
+
 ### `create-member`
 
 **Triggered by:** Manual HTTP call by an admin (not automated).
@@ -213,26 +241,37 @@ Supabase Auth (email/password provider) is the identity layer.
 
 Supabase Realtime wraps Postgres logical replication and exposes it as a WebSocket channel. The Android app subscribes once an active summon is found.
 
-**Channel name:** `lobby-{summon_id}`
+The app uses two independent Realtime channels:
 
-**Tables monitored:** `rsvps`, `summons`
+### Lobby channel
 
+**Channel name:** `lobby-{summon_id}`  
+**Tables monitored:** `rsvps`, `summons`  
 **Events:** INSERT, UPDATE, DELETE
 
-When any change arrives, `SummonViewModel` re-fetches the current summon and all its rsvps from Postgres and rebuilds the UI state. The WebSocket event is purely a trigger — it does not carry the full payload.
+When any change arrives, `SummonViewModel` re-fetches the current summon and all its rsvps from Postgres and rebuilds the UI state. The WebSocket event is a trigger only — the full payload is not used.
 
 This powers the live lobby: when someone on another device submits a response, every open lobby screen updates within seconds.
+
+### Chat channel
+
+**Channel name:** `chat`  
+**Tables monitored:** `messages`  
+**Events:** INSERT
+
+On INSERT, `ChatViewModel` decodes the payload directly via `decodeRecord<Message>()` and appends the message to the list. If decode fails, it falls back to a full `getMessages()` refetch. Messages already present (by `id`) are skipped to prevent duplicates from optimistic appends.
 
 ---
 
 ## 6. Push notifications (Firebase Cloud Messaging)
 
-FCM is used for two distinct purposes:
+FCM is used for three distinct purposes:
 
 | Message type | `type` field | Visible to user? | Purpose |
 |---|---|---|---|
 | Beacon alert | `summon` | Yes — loud, full-screen | Notify group that a game is called |
 | Silent refresh | `rsvp_update` | No | Trigger live lobby reload |
+| Mention alert | `mention` | Yes if backgrounded, silent if foregrounded | Notify @mentioned users of a chat message |
 
 ### Token lifecycle
 
@@ -255,11 +294,23 @@ FCM is used for two distinct purposes:
 ### Silent refresh flow
 
 1. Edge Function (validate-rsvp or close-summon) sends FCM data message with `type = rsvp_update`.
-2. `MyFirebaseService` calls `refreshLobby()` — an internal broadcast or state push — which prompts `SummonViewModel` to re-fetch.
+2. `MyFirebaseService` calls `RsvpRepository.refreshForSummon()` which updates in-memory state in `SummonViewModel`.
 
-### Notification channel
+### Mention alert flow
 
-Android notification channels are configured once at channel creation time. Changing sound or vibration after first creation has no effect; the channel must be deleted (uninstall app) and recreated. Channel `beacon_alert_channel` is configured with `IMPORTANCE_HIGH`, the custom sound URI, and the vibration pattern.
+1. After the Android app sends a message containing confirmed @mentions, it POSTs to `notify-mention` with the message id, sender info, and mentioned user IDs.
+2. `MyFirebaseService.onMessageReceived()` receives `type = mention`.
+3. **If foregrounded:** calls `ChatRepository.signalRefresh()`, which emits on a `MutableSharedFlow<Unit>`. `ChatViewModel` collects this signal and re-fetches the latest messages from Postgres — ensuring the mentioned message appears instantly on-screen even though the Realtime event may arrive slightly later.
+4. **If backgrounded:** shows a standard notification on channel `mention_channel` (`IMPORTANCE_DEFAULT`) that opens `MainActivity` when tapped. No sound or full-screen intent.
+
+### Notification channels
+
+Android notification channels are configured once at channel-creation time. Changing sound or vibration after first creation has no effect; the channel must be deleted (uninstall app) and recreated.
+
+| Channel ID | Importance | Purpose |
+|---|---|---|
+| `beacon_alert_channel` | HIGH | Beacon alerts — custom sound, vibration, full-screen intent |
+| `mention_channel` | DEFAULT | @mention alerts — standard notification, no sound override |
 
 ---
 
@@ -288,6 +339,9 @@ UI / ViewModel
 | `RsvpRepository` | Submits RSVPs via `validate-rsvp` Edge Function; fetches rsvps by summon |
 | `HistoryRepository` | Reads `summon_history`; date-range filtering |
 | `ConfigRepository` | Reads and writes `config` |
+| `ChatRepository` | Reads/inserts `messages`; calls `notify-mention` Edge Function; exposes `refreshSignal` |
+
+**`ChatRepository.refreshSignal`** is a `MutableSharedFlow<Unit>` used as a cross-boundary signal: `MyFirebaseService` calls `signalRefresh()` when a `mention` FCM message arrives while the app is foregrounded, and `ChatViewModel` collects it to trigger an immediate Postgres refetch. This decouples the FCM service (which runs outside the ViewModel lifecycle) from the ViewModel without needing a broadcast or singleton state.
 
 **Data models** are `@Serializable` Kotlin data classes that map 1:1 to Postgres columns. Supabase Postgrest deserialises JSON into them automatically.
 
@@ -300,10 +354,11 @@ The app follows a standard MVVM pattern with Jetpack Compose.
 ```
 MainActivity
 └── NavGraph (bottom-bar navigation)
-    ├── SummonScreen  ← SummonViewModel
-    ├── StatsScreen   ← StatsViewModel
+    ├── SummonScreen   ← SummonViewModel
+    ├── ChatScreen     ← ChatViewModel
+    ├── StatsScreen    ← StatsViewModel
     ├── RankingsScreen ← RankingsViewModel
-    ├── HistoryScreen ← HistoryViewModel
+    ├── HistoryScreen  ← HistoryViewModel
     └── SettingsScreen ← SettingsViewModel
 
 BeaconAlertActivity  (full-screen, shown over lock screen)
@@ -311,7 +366,18 @@ BeaconAlertActivity  (full-screen, shown over lock screen)
 
 **ViewModels** hold a `MutableStateFlow<UiState>` where `UiState` is a sealed class with `Loading`, `Loaded`, and `Error` variants. Composables collect this flow and render accordingly.
 
-**Navigation** uses Jetpack Compose Navigation with five fixed bottom-bar routes. Auth state is managed in `MainActivity`: unauthenticated → `LoginScreen`; authenticated → `NavGraph`.
+**Navigation** uses Jetpack Compose Navigation with six fixed bottom-bar routes. Auth state is managed in `MainActivity`: unauthenticated → `LoginScreen`; authenticated → `NavGraph`.
+
+### Chat screen
+
+`ChatScreen` / `ChatViewModel` implement a group chat with @mention support:
+
+- **Realtime subscription:** `ChatViewModel` subscribes to `channel("chat")` Postgres changes on the `messages` table. On `INSERT`, it decodes the payload directly via `decodeRecord<Message>()` and appends to state. Duplicate messages (from optimistic append + Realtime firing) are deduplicated by `id`.
+- **Input field:** Uses `BasicTextField` with `TextFieldValue(AnnotatedString)` rather than `OutlinedTextField`. This allows the input to render confirmed @mentions as highlighted + bold inline spans (`SpanStyle` with background tint and `FontWeight.Bold`).
+- **@mention autocomplete:** Typing `@` followed by at least one letter shows a drop-up suggestion list filtered by `startsWith` on `displayName`. `@all` is always the first suggestion. Tapping a suggestion inserts the correctly-cased name and adds it to `confirmedMentions`.
+- **Confirmed mentions:** Tracked as a `Set<String>` in `ChatViewModel`. Only names selected from the dropdown are confirmed — free-typed `@text` never highlights or triggers notifications. The set is pruned as the user edits (names no longer present in the text are removed).
+- **Mention highlighting in bubbles:** `buildAnnotatedString` scans each message's content and wraps substrings that match any `displayName` (case-insensitive) or `"all"` with the same `SpanStyle`. The `style =` parameter on `Text` is used (not the `color =` parameter, which would override spans).
+- **Unread badge:** The bottom nav tab shows a badge dot when the latest message's `created_at` is newer than the timestamp stored in `SharedPreferences` under `chat_last_read_at`. The badge clears when the user opens Chat or sends a message.
 
 **Theme** — four themes (Midnight, Twilight, Dawn, Sponke) managed by `ThemeManager`, a singleton that persists the selection to `SharedPreferences`. Theme is applied at `OsquioApp` level so the entire Compose tree re-renders on change.
 
@@ -391,6 +457,37 @@ Each device with lobby open:
       → Triggers lobby refresh in SummonViewModel
           → Re-fetches rsvps
           → UI updates (new name appears in "Yes" column)
+```
+
+### Sending a chat message with @mentions
+
+```
+User types "@kv" → dropdown appears → taps "Kv"
+  → ChatViewModel.confirmMention("Kv")
+  → Input field rebuilds with highlighted @Kv span
+
+User taps Send
+  → ChatViewModel.sendMessage(userId, senderName, content)
+      → ChatRepository.sendMessage() — INSERT into messages { select() }
+          → Returns inserted Message with id
+      → Optimistically appends message to state
+      → markRead()
+      → Resolves confirmed mention names → user IDs (or ["all"])
+      → ChatRepository.notifyMentions(userId, senderName, message.id, mentionedIds)
+          → HTTP POST to notify-mention Edge Function (with bearer token)
+              → Fetches FCM tokens for mentioned users
+              → Sends FCM data message { type: "mention", sender_name, message_id }
+
+Recipient device (app foregrounded):
+  → MyFirebaseService receives type="mention"
+      → ChatRepository.signalRefresh() emits on refreshSignal flow
+          → ChatViewModel.listenForRefreshSignal() collects
+              → Re-fetches messages from Postgres
+              → New message appears in chat immediately
+
+Recipient device (app backgrounded):
+  → MyFirebaseService receives type="mention"
+      → showMentionNotification() — standard notification, opens MainActivity
 ```
 
 ### Beacon closing
