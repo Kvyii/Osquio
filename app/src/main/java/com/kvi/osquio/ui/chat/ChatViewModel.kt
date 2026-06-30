@@ -52,8 +52,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = ChatUiState.Loaded(messages, users)
                 updateUnreadBadge(messages)
                 subscribeToRealtime()
+                listenForRefreshSignal()
             } catch (e: Exception) {
                 _state.value = ChatUiState.Error(e.message ?: "Failed to load chat")
+            }
+        }
+    }
+
+    private fun listenForRefreshSignal() {
+        viewModelScope.launch {
+            ChatRepository.refreshSignal.collect {
+                val current = _state.value as? ChatUiState.Loaded ?: return@collect
+                try {
+                    val messages = ChatRepository.getMessages()
+                    _state.value = current.copy(messages = messages)
+                    updateUnreadBadge(messages)
+                } catch (_: Exception) {}
             }
         }
     }

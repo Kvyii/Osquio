@@ -13,6 +13,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.kvi.osquio.data.ChatRepository
 import com.kvi.osquio.data.RsvpRepository
 import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.ui.beacon.BeaconAlertActivity
@@ -37,7 +38,9 @@ class MyFirebaseService : FirebaseMessagingService() {
             "mention" -> {
                 val isForegrounded = ProcessLifecycleOwner.get().lifecycle.currentState
                     .isAtLeast(Lifecycle.State.STARTED)
-                if (!isForegrounded) {
+                if (isForegrounded) {
+                    ChatRepository.signalRefresh()
+                } else {
                     val senderName = message.data["sender_name"] ?: "Someone"
                     showMentionNotification("@mention", "Message from $senderName")
                 }
