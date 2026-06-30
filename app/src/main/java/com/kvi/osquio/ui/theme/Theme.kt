@@ -1,5 +1,9 @@
 package com.kvi.osquio.ui.theme
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -9,7 +13,12 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
+import com.kvi.osquio.R
 
 enum class AppTheme { MIDNIGHT, TWILIGHT, DAWN, SPONKE }
 
@@ -67,11 +76,11 @@ private val DawnColors = lightColorScheme(
     outlineVariant = Color(0xFFE8D5D4),
 )
 
-// Childish bubblegum pink light theme
+// Childish bubblegum pink light theme — surface/surfaceVariant are semi-transparent so wallpaper shows through cards
 private val SponkeColors = lightColorScheme(
-    background = Color(0xFFFFF0F5),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFFFE4EF),
+    background = Color(0x00000000),     // transparent — wallpaper shows through Scaffold floor
+    surface = Color(0xE6FFFFFF),        // 90% opaque white
+    surfaceVariant = Color(0xE6FFE4EF), // 90% opaque pink tint
     onBackground = Color(0xFF4A1530),
     onSurface = Color(0xFF4A1530),
     onSurfaceVariant = Color(0xFFB06080),
@@ -95,13 +104,28 @@ val LocalAppTheme = compositionLocalOf { AppTheme.MIDNIGHT }
 
 @Composable
 fun OsquioTheme(content: @Composable () -> Unit) {
-    val colors = when (ThemeManager.current) {
+    val theme = ThemeManager.current
+    val colors = when (theme) {
         AppTheme.MIDNIGHT -> MidnightColors
         AppTheme.TWILIGHT -> TwilightColors
         AppTheme.DAWN -> DawnColors
         AppTheme.SPONKE -> SponkeColors
     }
-    CompositionLocalProvider(LocalAppTheme provides ThemeManager.current) {
-        MaterialTheme(colorScheme = colors, content = content)
+    CompositionLocalProvider(LocalAppTheme provides theme) {
+        if (theme == AppTheme.SPONKE) {
+            MaterialTheme(colorScheme = colors) {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFFF0F5))) {
+                    Image(
+                        painter = painterResource(R.drawable.sponke_theme),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().alpha(0.4f),
+                        contentScale = ContentScale.Crop,
+                    )
+                    content()
+                }
+            }
+        } else {
+            MaterialTheme(colorScheme = colors, content = content)
+        }
     }
 }

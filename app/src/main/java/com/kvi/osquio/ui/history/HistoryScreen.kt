@@ -65,7 +65,7 @@ private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (Local
     val today = LocalDate.now()
 
     Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, bottom = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
             Text("History", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
             IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
         }
