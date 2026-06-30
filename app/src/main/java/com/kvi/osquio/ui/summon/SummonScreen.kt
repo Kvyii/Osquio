@@ -24,9 +24,19 @@ private val timeFmt = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.syst
 @Composable
 fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
     val state by vm.state.collectAsState()
+    val notifyError by vm.notifyError.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(currentUser.id) { vm.load(currentUser) }
 
+    LaunchedEffect(notifyError) {
+        val error = notifyError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(error)
+        vm.clearNotifyError()
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Box(Modifier.padding(padding)) {
     when (val s = state) {
         is SummonUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -34,12 +44,16 @@ fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
         is SummonUiState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(s.message, color = MaterialTheme.colorScheme.error)
         }
-        is SummonUiState.NoActiveSummon -> SummonCreationContent(
-            currentUser = currentUser,
-            config = s.config,
-            cooldownRemaining = s.cooldownRemaining,
-            onSummon = { gameTime -> vm.createSummon(currentUser, gameTime) },
-        )
+        is SummonUiState.NoActiveSummon -> {
+            val isCreating by vm.isCreating.collectAsState()
+            SummonCreationContent(
+                currentUser = currentUser,
+                config = s.config,
+                cooldownRemaining = s.cooldownRemaining,
+                isCreating = isCreating,
+                onSummon = { gameTime -> vm.createSummon(currentUser, gameTime) },
+            )
+        }
         is SummonUiState.ActiveLobby -> LobbyContent(
             lobby = s.lobby,
             currentUser = currentUser,
@@ -50,6 +64,8 @@ fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
             },
         )
     }
+    } // Box
+    } // Scaffold
 }
 
 @Composable
@@ -57,6 +73,7 @@ private fun SummonCreationContent(
     currentUser: User,
     config: Config,
     cooldownRemaining: Long,
+    isCreating: Boolean,
     onSummon: (Instant) -> Unit,
 ) {
     var selectedMinutes by remember { mutableStateOf(30) }
@@ -124,9 +141,10 @@ private fun SummonCreationContent(
             Button(
                 onClick = { onSummon(gameInstant) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !inCooldown,
+                enabled = !inCooldown && !isCreating,
             ) {
-                Text("Beacon!")
+                if (isCreating) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Text("Beacon!")
             }
             Spacer(Modifier.height(4.dp))
             Text(

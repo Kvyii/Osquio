@@ -36,9 +36,16 @@ Deno.serve(async (req) => {
     .eq('id', summonerId)
     .single()
 
+  const { data: rsvps } = await supabase
+    .from('rsvps')
+    .select('user_id')
+    .eq('summon_id', record.id)
+
+  const respondedUserIds = new Set((rsvps ?? []).map((r: { user_id: string }) => r.user_id))
+
   const { data: users, error } = await supabase
     .from('users')
-    .select('fcm_token')
+    .select('fcm_token, id')
     .not('fcm_token', 'is', null)
     .neq('id', summonerId)
 
@@ -47,7 +54,9 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 })
   }
 
-  if (!users || users.length === 0) {
+  const eligibleUsers = (users ?? []).filter((u: { fcm_token: string; id: string }) => !respondedUserIds.has(u.id))
+
+  if (eligibleUsers.length === 0) {
     return new Response(JSON.stringify({ ok: true, sent: 0 }), { status: 200 })
   }
 
@@ -60,7 +69,7 @@ Deno.serve(async (req) => {
 
   const accessToken = await getFcmAccessToken()
 
-  const sendPromises = users.map((user) =>
+  const sendPromises = eligibleUsers.map((user: { fcm_token: string; id: string }) =>
     fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
       method: 'POST',
       headers: {
@@ -90,5 +99,5 @@ Deno.serve(async (req) => {
 
   await Promise.allSettled(sendPromises)
 
-  return new Response(JSON.stringify({ ok: true, sent: users.length }), { status: 200 })
+  return new Response(JSON.stringify({ ok: true, sent: eligibleUsers.length }), { status: 200 })
 })

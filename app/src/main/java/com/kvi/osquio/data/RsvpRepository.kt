@@ -31,10 +31,13 @@ object RsvpRepository {
             put("response", response)
             if (responseTime != null) put("response_time", responseTime)
         }
-        httpClient.post("${BuildConfig.SUPABASE_URL}/functions/v1/validate-rsvp") {
+        val res = httpClient.post("${BuildConfig.SUPABASE_URL}/functions/v1/validate-rsvp") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
             setBody(body.toString())
+        }
+        if (res.status.value !in 200..299) {
+            throw Exception("RSVP failed (${res.status.value})")
         }
     }
 

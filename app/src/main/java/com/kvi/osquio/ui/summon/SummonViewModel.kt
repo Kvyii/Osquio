@@ -1,6 +1,8 @@
 package com.kvi.osquio.ui.summon
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kvi.osquio.data.ConfigRepository
 import com.kvi.osquio.data.RsvpRepository
@@ -40,10 +42,22 @@ sealed interface SummonUiState {
     data class Error(val message: String) : SummonUiState
 }
 
-class SummonViewModel : ViewModel() {
+private const val CLIENT_LOCKOUT_SECONDS = 15 * 60L
+
+class SummonViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val prefs = app.getSharedPreferences("summon_prefs", Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow<SummonUiState>(SummonUiState.Loading)
     val state = _state.asStateFlow()
+
+    private val _isCreating = MutableStateFlow(false)
+    val isCreating = _isCreating.asStateFlow()
+
+    private val _notifyError = MutableStateFlow<String?>(null)
+    val notifyError = _notifyError.asStateFlow()
+
+    fun clearNotifyError() { _notifyError.value = null }
 
     private var realtimeJob: Job? = null
     private var cooldownJob: Job? = null
@@ -53,7 +67,10 @@ class SummonViewModel : ViewModel() {
 
     private var rebeaconCount = 0
     private var rebeaconWindowStart = Instant.now()
-    private var lastRebeaconAt: Instant? = null
+    private var lastRebeaconAt: Instant? = run {
+        val epoch = prefs.getLong("last_rebeacon_at", 0L)
+        if (epoch > 0L) Instant.ofEpochSecond(epoch) else null
+    }
 
     fun load(currentUser: User) {
         viewModelScope.launch {
@@ -150,17 +167,26 @@ class SummonViewModel : ViewModel() {
     }
 
     fun createSummon(currentUser: User, gameTime: Instant) {
+        if (_isCreating.value) return
+        if (!currentUser.isAdmin) {
+            val lastSummonAt = prefs.getLong("last_summon_at", 0L)
+            if (Instant.now().epochSecond - lastSummonAt < CLIENT_LOCKOUT_SECONDS) return
+        }
+        prefs.edit().putLong("last_summon_at", Instant.now().epochSecond).apply()
+        _isCreating.value = true
         viewModelScope.launch {
             try {
                 val config = ConfigRepository.getConfig()
-                SummonRepository.createSummon(
+                val summon = SummonRepository.createSummon(
                     createdBy = currentUser.id,
                     gameTime = gameTime.toString(),
                 )
-                val summon = SummonRepository.activeSummon() ?: return@launch
                 loadLobby(summon, config)
             } catch (e: Exception) {
+                _notifyError.value = "Notification failed: ${e.message ?: "Unable to connect to server"}"
                 _state.value = SummonUiState.Error(e.message ?: "Failed to create summon")
+            } finally {
+                _isCreating.value = false
             }
         }
     }
@@ -198,9 +224,12 @@ class SummonViewModel : ViewModel() {
             try {
                 SummonRepository.triggerRebeacon(summonId)
                 lastRebeaconAt = now
+                prefs.edit().putLong("last_rebeacon_at", now.epochSecond).apply()
                 rebeaconCount++
                 startRebeaconCooldownTick()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _notifyError.value = "Notification failed: ${e.message ?: "Unable to connect to server"}"
+            }
         }
     }
 
@@ -223,6 +252,18 @@ class SummonViewModel : ViewModel() {
     }
 
     fun submitRsvp(summonId: String, userId: String, response: String, responseTime: Instant?) {
+        val current = _state.value as? SummonUiState.ActiveLobby ?: return
+        val optimisticRsvp = Rsvp(
+            summonId = summonId,
+            userId = userId,
+            response = response,
+            responseTime = responseTime?.toString(),
+        )
+        val updatedRsvps = current.lobby.rsvps
+            .filter { it.userId != userId }
+            .plus(optimisticRsvp)
+        _state.value = SummonUiState.ActiveLobby(current.lobby.copy(rsvps = updatedRsvps))
+
         viewModelScope.launch {
             try {
                 RsvpRepository.upsertRsvp(
@@ -232,7 +273,8 @@ class SummonViewModel : ViewModel() {
                     responseTime = responseTime?.toString(),
                 )
             } catch (e: Exception) {
-                _state.value = SummonUiState.Error(e.message ?: "Failed to RSVP")
+                _state.value = SummonUiState.ActiveLobby(current.lobby)
+                _notifyError.value = "Failed to submit RSVP: ${e.message ?: "Unknown error"}"
             }
         }
     }

@@ -47,7 +47,6 @@ fun SettingsScreen(currentUser: User, onSignOut: () -> Unit, onBack: () -> Unit 
 @Composable
 private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel, onSignOut: () -> Unit, onBack: () -> Unit) {
     val scrollState = rememberScrollState()
-    var cooldownSeconds by remember(state.config) { mutableStateOf(state.config.summonCooldownSeconds.toString()) }
     var maxAheadMinutes by remember(state.config) { mutableStateOf(state.config.maxSummonAheadMinutes.toString()) }
 
     state.message?.let { msg ->
@@ -120,14 +119,6 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
                     Text("Admin — Config", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = cooldownSeconds,
-                        onValueChange = { cooldownSeconds = it },
-                        label = { Text("Cooldown (seconds)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
                         value = maxAheadMinutes,
                         onValueChange = { maxAheadMinutes = it },
                         label = { Text("Max summon ahead (minutes)") },
@@ -136,9 +127,8 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
                     )
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = {
-                        val cd = cooldownSeconds.toIntOrNull() ?: return@Button
                         val ma = maxAheadMinutes.toIntOrNull() ?: return@Button
-                        vm.updateConfig(cd, ma)
+                        vm.updateConfig(ma)
                     }) { Text("Save config") }
                 }
             }

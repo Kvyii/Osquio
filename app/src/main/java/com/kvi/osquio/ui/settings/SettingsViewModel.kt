@@ -66,14 +66,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun updateConfig(cooldownSeconds: Int, maxAheadMinutes: Int) {
+    fun updateConfig(maxAheadMinutes: Int) {
         viewModelScope.launch {
             try {
-                ConfigRepository.updateConfig(cooldownSeconds, maxAheadMinutes)
+                ConfigRepository.updateConfig(maxAheadMinutes)
                 val current = _state.value as? SettingsUiState.Loaded ?: return@launch
                 _state.value = current.copy(
                     config = current.config.copy(
-                        summonCooldownSeconds = cooldownSeconds,
                         maxSummonAheadMinutes = maxAheadMinutes,
                     ),
                     message = "Config updated",
