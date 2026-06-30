@@ -11,6 +11,7 @@ import com.kvi.osquio.data.model.User
 import com.kvi.osquio.data.supabase
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,13 +58,25 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             launch {
                 channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                     table = "messages"
-                }.collect {
-                    try {
-                        val messages = ChatRepository.getMessages()
-                        val current = _state.value as? ChatUiState.Loaded ?: return@collect
-                        _state.value = current.copy(messages = messages)
-                        updateUnreadBadge(messages)
-                    } catch (_: Exception) {}
+                }.collect { action ->
+                    val current = _state.value as? ChatUiState.Loaded ?: return@collect
+                    val newMessage = runCatching {
+                        when (action) {
+                            is PostgresAction.Insert -> action.decodeRecord<Message>()
+                            else -> null
+                        }
+                    }.getOrNull()
+                    if (newMessage != null) {
+                        val updated = current.messages + newMessage
+                        _state.value = current.copy(messages = updated)
+                        updateUnreadBadge(updated)
+                    } else {
+                        try {
+                            val messages = ChatRepository.getMessages()
+                            _state.value = current.copy(messages = messages)
+                            updateUnreadBadge(messages)
+                        } catch (_: Exception) {}
+                    }
                 }
             }
             channel.subscribe()
