@@ -34,12 +34,16 @@ fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
         is SummonUiState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(s.message, color = MaterialTheme.colorScheme.error)
         }
-        is SummonUiState.NoActiveSummon -> SummonCreationContent(
-            currentUser = currentUser,
-            config = s.config,
-            cooldownRemaining = s.cooldownRemaining,
-            onSummon = { gameTime -> vm.createSummon(currentUser, gameTime) },
-        )
+        is SummonUiState.NoActiveSummon -> {
+            val isCreating by vm.isCreating.collectAsState()
+            SummonCreationContent(
+                currentUser = currentUser,
+                config = s.config,
+                cooldownRemaining = s.cooldownRemaining,
+                isCreating = isCreating,
+                onSummon = { gameTime -> vm.createSummon(currentUser, gameTime) },
+            )
+        }
         is SummonUiState.ActiveLobby -> LobbyContent(
             lobby = s.lobby,
             currentUser = currentUser,
@@ -57,6 +61,7 @@ private fun SummonCreationContent(
     currentUser: User,
     config: Config,
     cooldownRemaining: Long,
+    isCreating: Boolean,
     onSummon: (Instant) -> Unit,
 ) {
     var selectedMinutes by remember { mutableStateOf(30) }
@@ -124,9 +129,10 @@ private fun SummonCreationContent(
             Button(
                 onClick = { onSummon(gameInstant) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !inCooldown,
+                enabled = !inCooldown && !isCreating,
             ) {
-                Text("Beacon!")
+                if (isCreating) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Text("Beacon!")
             }
             Spacer(Modifier.height(4.dp))
             Text(

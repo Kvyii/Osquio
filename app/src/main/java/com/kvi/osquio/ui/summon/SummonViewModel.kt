@@ -1,6 +1,8 @@
 package com.kvi.osquio.ui.summon
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kvi.osquio.data.ConfigRepository
 import com.kvi.osquio.data.RsvpRepository
@@ -40,10 +42,17 @@ sealed interface SummonUiState {
     data class Error(val message: String) : SummonUiState
 }
 
-class SummonViewModel : ViewModel() {
+private const val CLIENT_LOCKOUT_SECONDS = 15 * 60L
+
+class SummonViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val prefs = app.getSharedPreferences("summon_prefs", Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow<SummonUiState>(SummonUiState.Loading)
     val state = _state.asStateFlow()
+
+    private val _isCreating = MutableStateFlow(false)
+    val isCreating = _isCreating.asStateFlow()
 
     private var realtimeJob: Job? = null
     private var cooldownJob: Job? = null
@@ -53,7 +62,10 @@ class SummonViewModel : ViewModel() {
 
     private var rebeaconCount = 0
     private var rebeaconWindowStart = Instant.now()
-    private var lastRebeaconAt: Instant? = null
+    private var lastRebeaconAt: Instant? = run {
+        val epoch = prefs.getLong("last_rebeacon_at", 0L)
+        if (epoch > 0L) Instant.ofEpochSecond(epoch) else null
+    }
 
     fun load(currentUser: User) {
         viewModelScope.launch {
@@ -150,6 +162,12 @@ class SummonViewModel : ViewModel() {
     }
 
     fun createSummon(currentUser: User, gameTime: Instant) {
+        if (_isCreating.value) return
+        if (!currentUser.isAdmin) {
+            val lastSummonAt = prefs.getLong("last_summon_at", 0L)
+            if (Instant.now().epochSecond - lastSummonAt < CLIENT_LOCKOUT_SECONDS) return
+        }
+        _isCreating.value = true
         viewModelScope.launch {
             try {
                 val config = ConfigRepository.getConfig()
@@ -157,10 +175,13 @@ class SummonViewModel : ViewModel() {
                     createdBy = currentUser.id,
                     gameTime = gameTime.toString(),
                 )
+                prefs.edit().putLong("last_summon_at", Instant.now().epochSecond).apply()
                 val summon = SummonRepository.activeSummon() ?: return@launch
                 loadLobby(summon, config)
             } catch (e: Exception) {
                 _state.value = SummonUiState.Error(e.message ?: "Failed to create summon")
+            } finally {
+                _isCreating.value = false
             }
         }
     }
@@ -198,6 +219,7 @@ class SummonViewModel : ViewModel() {
             try {
                 SummonRepository.triggerRebeacon(summonId)
                 lastRebeaconAt = now
+                prefs.edit().putLong("last_rebeacon_at", now.epochSecond).apply()
                 rebeaconCount++
                 startRebeaconCooldownTick()
             } catch (_: Exception) {}
