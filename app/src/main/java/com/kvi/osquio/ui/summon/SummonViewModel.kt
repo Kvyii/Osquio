@@ -252,6 +252,18 @@ class SummonViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun submitRsvp(summonId: String, userId: String, response: String, responseTime: Instant?) {
+        val current = _state.value as? SummonUiState.ActiveLobby ?: return
+        val optimisticRsvp = Rsvp(
+            summonId = summonId,
+            userId = userId,
+            response = response,
+            responseTime = responseTime?.toString(),
+        )
+        val updatedRsvps = current.lobby.rsvps
+            .filter { it.userId != userId }
+            .plus(optimisticRsvp)
+        _state.value = SummonUiState.ActiveLobby(current.lobby.copy(rsvps = updatedRsvps))
+
         viewModelScope.launch {
             try {
                 RsvpRepository.upsertRsvp(
@@ -261,7 +273,8 @@ class SummonViewModel(app: Application) : AndroidViewModel(app) {
                     responseTime = responseTime?.toString(),
                 )
             } catch (e: Exception) {
-                _state.value = SummonUiState.Error(e.message ?: "Failed to RSVP")
+                _state.value = SummonUiState.ActiveLobby(current.lobby)
+                _notifyError.value = "Failed to submit RSVP: ${e.message ?: "Unknown error"}"
             }
         }
     }
