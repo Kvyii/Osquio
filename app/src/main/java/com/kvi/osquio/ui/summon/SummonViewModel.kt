@@ -54,6 +54,11 @@ class SummonViewModel(app: Application) : AndroidViewModel(app) {
     private val _isCreating = MutableStateFlow(false)
     val isCreating = _isCreating.asStateFlow()
 
+    private val _notifyError = MutableStateFlow<String?>(null)
+    val notifyError = _notifyError.asStateFlow()
+
+    fun clearNotifyError() { _notifyError.value = null }
+
     private var realtimeJob: Job? = null
     private var cooldownJob: Job? = null
     private var rebeaconTickJob: Job? = null
@@ -167,18 +172,18 @@ class SummonViewModel(app: Application) : AndroidViewModel(app) {
             val lastSummonAt = prefs.getLong("last_summon_at", 0L)
             if (Instant.now().epochSecond - lastSummonAt < CLIENT_LOCKOUT_SECONDS) return
         }
+        prefs.edit().putLong("last_summon_at", Instant.now().epochSecond).apply()
         _isCreating.value = true
         viewModelScope.launch {
             try {
                 val config = ConfigRepository.getConfig()
-                SummonRepository.createSummon(
+                val summon = SummonRepository.createSummon(
                     createdBy = currentUser.id,
                     gameTime = gameTime.toString(),
                 )
-                prefs.edit().putLong("last_summon_at", Instant.now().epochSecond).apply()
-                val summon = SummonRepository.activeSummon() ?: return@launch
                 loadLobby(summon, config)
             } catch (e: Exception) {
+                _notifyError.value = "Notification failed: ${e.message ?: "Unable to connect to server"}"
                 _state.value = SummonUiState.Error(e.message ?: "Failed to create summon")
             } finally {
                 _isCreating.value = false
@@ -222,7 +227,9 @@ class SummonViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.edit().putLong("last_rebeacon_at", now.epochSecond).apply()
                 rebeaconCount++
                 startRebeaconCooldownTick()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _notifyError.value = "Notification failed: ${e.message ?: "Unable to connect to server"}"
+            }
         }
     }
 

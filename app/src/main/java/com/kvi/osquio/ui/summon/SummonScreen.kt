@@ -24,9 +24,19 @@ private val timeFmt = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.syst
 @Composable
 fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
     val state by vm.state.collectAsState()
+    val notifyError by vm.notifyError.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(currentUser.id) { vm.load(currentUser) }
 
+    LaunchedEffect(notifyError) {
+        val error = notifyError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(error)
+        vm.clearNotifyError()
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Box(Modifier.padding(padding)) {
     when (val s = state) {
         is SummonUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -54,6 +64,8 @@ fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
             },
         )
     }
+    } // Box
+    } // Scaffold
 }
 
 @Composable
