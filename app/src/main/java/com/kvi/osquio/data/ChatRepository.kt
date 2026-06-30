@@ -12,6 +12,8 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -21,6 +23,11 @@ object ChatRepository {
 
     private const val MESSAGE_LIMIT = 50L
     private val httpClient = HttpClient(OkHttp)
+
+    private val _refreshSignal = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val refreshSignal = _refreshSignal.asSharedFlow()
+
+    fun signalRefresh() { _refreshSignal.tryEmit(Unit) }
 
     suspend fun getMessages(): List<Message> =
         supabase.from("messages").select {
