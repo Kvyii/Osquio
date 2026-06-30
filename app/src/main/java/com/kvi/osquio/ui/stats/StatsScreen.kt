@@ -1,5 +1,6 @@
 package com.kvi.osquio.ui.stats
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -116,21 +117,16 @@ private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp, s
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             if (stat.isDeceased) {
+                val lastSeenLabel = if (stat.lastSeenAt != null) dateFmt.format(stat.lastSeenAt) else "never"
                 Text(
                     buildAnnotatedString {
                         append(stat.user.displayName)
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Normal)) {
-                            append(" (deceased)")
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontWeight = FontWeight.Normal, fontSize = MaterialTheme.typography.labelSmall.fontSize)) {
+                            append(" (deceased - last seen $lastSeenLabel)")
                         }
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                )
-                val lastSeenLabel = if (stat.lastSeenAt != null) dateFmt.format(stat.lastSeenAt) else "never"
-                Text(
-                    "last seen $lastSeenLabel",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 )
             } else {
                 Text(
