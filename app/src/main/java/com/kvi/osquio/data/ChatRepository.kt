@@ -6,13 +6,13 @@ import io.github.jan.supabase.postgrest.query.Order
 
 object ChatRepository {
 
-    private const val MESSAGE_LIMIT = 30L
+    private const val MESSAGE_LIMIT = 50L
 
     suspend fun getMessages(): List<Message> =
         supabase.from("messages").select {
-            order("created_at", order = Order.ASCENDING)
+            order("created_at", order = Order.DESCENDING)
             limit(MESSAGE_LIMIT)
-        }.decodeList<Message>()
+        }.decodeList<Message>().reversed()
 
     suspend fun sendMessage(userId: String, content: String) {
         supabase.from("messages").insert(
