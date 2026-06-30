@@ -23,3 +23,6 @@ supabase/.temp/
 
 # Claude Code session data
 .claude/
+
+# VSCode workspace settings
+.vscode/
