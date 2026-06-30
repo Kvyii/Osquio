@@ -41,5 +41,4 @@ object RsvpRepository {
         }
     }
 
-    suspend fun refreshForSummon(summonId: String): List<Rsvp> = rsvpsForSummon(summonId)
 }

@@ -1,23 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { GoogleAuth } from 'https://esm.sh/google-auth-library@9'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SERVICE_ROLE_KEY')!,
 )
-
-const serviceAccount = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!)
-const projectId = serviceAccount.project_id
-
-async function getFcmAccessToken(): Promise<string> {
-  const auth = new GoogleAuth({
-    credentials: serviceAccount,
-    scopes: ['https://www.googleapis.com/auth/firebase.messaging'],
-  })
-  const client = await auth.getClient()
-  const token = await client.getAccessToken()
-  return token.token!
-}
 
 function jsonError(message: string, status = 400) {
   return new Response(JSON.stringify({ error: message }), {
@@ -28,7 +14,7 @@ function jsonError(message: string, status = 400) {
 
 Deno.serve(async (req) => {
   // This function is called by the Android app directly (HTTP POST) before upserting the RSVP.
-  // It validates the RSVP, upserts the row, then sends silent FCM to all members.
+  // It validates the RSVP and upserts the row. Clients receive live updates via Supabase Realtime.
   const body = await req.json()
   const { summon_id, user_id, response, response_time } = body
 
@@ -83,43 +69,6 @@ Deno.serve(async (req) => {
   if (upsertError) {
     console.error('RSVP upsert failed:', upsertError)
     return new Response(JSON.stringify({ error: upsertError.message }), { status: 500 })
-  }
-
-  // Send silent FCM data message to all members so their lobby screens refresh
-  try {
-    const { data: users } = await supabase
-      .from('users')
-      .select('fcm_token')
-      .not('fcm_token', 'is', null)
-
-    if (users && users.length > 0) {
-      const accessToken = await getFcmAccessToken()
-      await Promise.allSettled(
-        users.map((user) =>
-          fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${accessToken}`,
-            },
-            body: JSON.stringify({
-              message: {
-                token: user.fcm_token,
-                data: {
-                  type: 'rsvp_update',
-                  summon_id,
-                },
-                android: {
-                  priority: 'high',
-                },
-              },
-            }),
-          })
-        )
-      )
-    }
-  } catch (e) {
-    console.error('FCM silent push failed (non-fatal):', e)
   }
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 })
