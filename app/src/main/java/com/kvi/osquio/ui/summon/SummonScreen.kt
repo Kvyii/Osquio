@@ -199,7 +199,7 @@ private fun LobbyContent(
                 listOf(
                     Triple("yes", "Yes", { onRsvp("yes", null) }),
                     Triple("no", "No", { onRsvp("no", null) }),
-                    Triple("yes_at_time", "Yes at...", { showTimePickerForYesAt = true }),
+                    Triple("yes_at_time", "Maybe at...", { showTimePickerForYesAt = true }),
                 ).forEach { (response, label, action) ->
                     if (myResponse == response) {
                         Button(
@@ -284,7 +284,7 @@ private fun RsvpRow(user: User?, rsvp: Rsvp) {
             val label = when (rsvp.response) {
                 "yes" -> "Yes"
                 "no" -> "No"
-                "yes_at_time" -> "Yes at ${rsvp.responseTime?.let { timeFmt.format(Instant.parse(it)) } ?: "?"}"
+                "yes_at_time" -> "Maybe at ${rsvp.responseTime?.let { timeFmt.format(Instant.parse(it)) } ?: "?"}"
                 else -> rsvp.response
             }
             Text(label)
@@ -328,7 +328,7 @@ private fun YesAtTimePicker(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Yes at what time?") },
+        title = { Text("Maybe at what time?") },
         text = {
             Column {
                 val targetInstant = now.plusSeconds(selectedOffset * 60L)
