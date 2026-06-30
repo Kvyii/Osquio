@@ -284,7 +284,9 @@ private fun RsvpRow(user: User?, rsvp: Rsvp) {
             val label = when (rsvp.response) {
                 "yes" -> "Yes"
                 "no" -> "No"
+
                 "yes_at_time" -> rsvp.responseTime?.let { "Maybe at ${timeFmt.format(Instant.parse(it))}" } ?: "Maybe"
+
                 else -> rsvp.response
             }
             Text(label)
