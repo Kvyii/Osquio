@@ -1,6 +1,5 @@
 package com.kvi.osquio.ui.theme
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,8 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
+import coil.compose.AsyncImage
 import com.kvi.osquio.R
 
 enum class AppTheme { MIDNIGHT, TWILIGHT, DAWN, SPONKE }
@@ -112,20 +111,16 @@ fun OsquioTheme(content: @Composable () -> Unit) {
         AppTheme.SPONKE -> SponkeColors
     }
     CompositionLocalProvider(LocalAppTheme provides theme) {
-        if (theme == AppTheme.SPONKE) {
-            MaterialTheme(colorScheme = colors) {
-                Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFFF0F5))) {
-                    Image(
-                        painter = painterResource(R.drawable.sponke_theme),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().alpha(0.4f),
-                        contentScale = ContentScale.Crop,
-                    )
-                    content()
-                }
+        MaterialTheme(colorScheme = colors) {
+            Box(modifier = Modifier.fillMaxSize().background(Color(0xFFFFF0F5))) {
+                AsyncImage(
+                    model = R.drawable.sponke_theme,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().alpha(if (theme == AppTheme.SPONKE) 0.4f else 0f),
+                    contentScale = ContentScale.Crop,
+                )
+                content()
             }
-        } else {
-            MaterialTheme(colorScheme = colors, content = content)
         }
     }
 }
