@@ -9,8 +9,11 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.net.Uri
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.kvi.osquio.data.ChatRepository
 import com.kvi.osquio.data.RsvpRepository
 import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.ui.beacon.BeaconAlertActivity
@@ -30,6 +33,16 @@ class MyFirebaseService : FirebaseMessagingService() {
                 val summonId = message.data["summon_id"] ?: return
                 serviceScope.launch {
                     RsvpRepository.refreshForSummon(summonId)
+                }
+            }
+            "mention" -> {
+                val isForegrounded = ProcessLifecycleOwner.get().lifecycle.currentState
+                    .isAtLeast(Lifecycle.State.STARTED)
+                if (isForegrounded) {
+                    ChatRepository.signalRefresh()
+                } else {
+                    val senderName = message.data["sender_name"] ?: "Someone"
+                    showMentionNotification("@mention", "Message from $senderName")
                 }
             }
             else -> {
@@ -141,6 +154,31 @@ class MyFirebaseService : FirebaseMessagingService() {
         }
 
         manager.notify(1001, builder.build())
+    }
+
+    private fun showMentionNotification(title: String, body: String) {
+        val channelId = "mention_channel"
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channel = NotificationChannel(channelId, "Mentions", NotificationManager.IMPORTANCE_DEFAULT)
+        manager.createNotificationChannel(channel)
+
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val openPending = PendingIntent.getActivity(
+            this, 10, openIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setSmallIcon(R.drawable.ic_dota)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(openPending)
+            .setAutoCancel(true)
+            .build()
+
+        manager.notify(1002, notification)
     }
 
     override fun onDestroy() {

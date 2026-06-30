@@ -1,10 +1,13 @@
 package com.kvi.osquio.ui.chat
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -13,8 +16,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kvi.osquio.data.model.Message
@@ -66,6 +77,49 @@ private fun buildChatItems(messages: List<Message>): List<ChatItem> {
     return items
 }
 
+private fun buildStyledInput(text: String, confirmedMentions: Set<String>, mentionColor: Color, mentionBg: Color): AnnotatedString {
+    val regex = Regex("@(\\S+)")
+    return buildAnnotatedString {
+        var last = 0
+        regex.findAll(text).forEach { match ->
+            val name = match.groupValues[1]
+            val isConfirmed = confirmedMentions.contains(name)
+            append(text.substring(last, match.range.first))
+            if (isConfirmed) {
+                withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.Bold, background = mentionBg)) {
+                    append(match.value)
+                }
+            } else {
+                append(match.value)
+            }
+            last = match.range.last + 1
+        }
+        append(text.substring(last))
+    }
+}
+
+private fun buildMessageText(content: String, displayNames: Set<String>, mentionColor: Color, mentionBg: Color): AnnotatedString {
+    val regex = Regex("@(\\S+)")
+    return buildAnnotatedString {
+        var last = 0
+        regex.findAll(content).forEach { match ->
+            val name = match.groupValues[1]
+            val isValid = name.equals("all", ignoreCase = true) ||
+                displayNames.any { it.equals(name, ignoreCase = true) }
+            append(content.substring(last, match.range.first))
+            if (isValid) {
+                withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.Bold, background = mentionBg)) {
+                    append(match.value)
+                }
+            } else {
+                append(match.value)
+            }
+            last = match.range.last + 1
+        }
+        append(content.substring(last))
+    }
+}
+
 @Composable
 fun ChatScreen(
     currentUser: User,
@@ -73,6 +127,8 @@ fun ChatScreen(
     vm: ChatViewModel,
 ) {
     val state by vm.state.collectAsState()
+    val mentionSuggestions by vm.mentionSuggestions.collectAsState()
+    val confirmedMentions by vm.confirmedMentions.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
 
@@ -93,7 +149,12 @@ fun ChatScreen(
                 messages = s.messages,
                 users = s.users,
                 currentUser = currentUser,
-                onSend = { vm.sendMessage(currentUser.id, it) },
+                mentionSuggestions = mentionSuggestions,
+                confirmedMentions = confirmedMentions,
+                onInputChanged = { vm.onInputChanged(it) },
+                onConfirmMention = { vm.confirmMention(it) },
+                onMentionDismiss = { vm.dismissSuggestions() },
+                onSend = { vm.sendMessage(currentUser.id, currentUser.displayName, it) },
                 onScrolledToBottom = { vm.markRead() },
                 modifier = Modifier.weight(1f),
             )
@@ -106,12 +167,29 @@ private fun ChatContent(
     messages: List<Message>,
     users: Map<String, User>,
     currentUser: User,
+    mentionSuggestions: List<User>,
+    confirmedMentions: Set<String>,
+    onInputChanged: (String) -> Unit,
+    onConfirmMention: (String) -> Unit,
+    onMentionDismiss: () -> Unit,
     onSend: (String) -> Unit,
     onScrolledToBottom: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    var inputText by remember { mutableStateOf("") }
+    val displayNames = remember(users) { users.values.map { it.displayName }.toSet() }
+
+    val mentionColor = MaterialTheme.colorScheme.primary
+    val mentionBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+
+    var fieldValue by remember {
+        mutableStateOf(TextFieldValue(""))
+    }
+
+    fun rebuildField(text: String, cursorPos: Int, mentions: Set<String>): TextFieldValue {
+        val annotated = buildStyledInput(text, mentions, mentionColor, mentionBg)
+        return TextFieldValue(annotated, selection = TextRange(cursorPos))
+    }
 
     val chatItems = remember(messages) { buildChatItems(messages) }
 
@@ -145,9 +223,28 @@ private fun ChatContent(
                         ownAvatarUrl = currentUser.avatarUrl,
                         senderAvatarUrl = users[item.userId]?.avatarUrl,
                         senderName = users[item.userId]?.displayName ?: "Unknown",
+                        displayNames = displayNames,
                     )
                 }
             }
+        }
+
+        if (mentionSuggestions.isNotEmpty()) {
+            MentionSuggestions(
+                suggestions = mentionSuggestions,
+                onSelect = { user ->
+                    val text = fieldValue.text
+                    val atIndex = text.lastIndexOf('@')
+                    if (atIndex != -1) {
+                        val name = if (user == null) "all" else user.displayName
+                        val newText = text.substring(0, atIndex) + "@$name "
+                        onConfirmMention(name)
+                        fieldValue = rebuildField(newText, newText.length, confirmedMentions + name)
+                        onInputChanged(newText)
+                    }
+                    onMentionDismiss()
+                },
+            )
         }
 
         HorizontalDivider()
@@ -155,23 +252,100 @@ private fun ChatContent(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedTextField(
-                value = inputText,
-                onValueChange = { if (it.length <= 200) inputText = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Message...") },
-                singleLine = true,
-                shape = RoundedCornerShape(24.dp),
-                suffix = if (inputText.length >= 160) {
-                    { Text("${200 - inputText.length}", style = MaterialTheme.typography.labelSmall, color = if (inputText.length >= 190) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
-                } else null,
+            val textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurface,
             )
+            val charCount = fieldValue.text.length
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                if (fieldValue.text.isEmpty()) {
+                    Text(
+                        "Message...",
+                        style = textStyle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                }
+                Column {
+                    BasicTextField(
+                        value = fieldValue,
+                        onValueChange = { newVal ->
+                            if (newVal.text.length <= 200) {
+                                fieldValue = rebuildField(newVal.text, newVal.selection.end, confirmedMentions)
+                                onInputChanged(newVal.text)
+                            }
+                        },
+                        textStyle = textStyle,
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (charCount >= 160) {
+                        Text(
+                            "${200 - charCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (charCount >= 190) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.width(8.dp))
             IconButton(
-                onClick = { onSend(inputText); inputText = "" },
-                enabled = inputText.isNotBlank(),
+                onClick = {
+                    onSend(fieldValue.text)
+                    fieldValue = TextFieldValue(AnnotatedString(""))
+                    onMentionDismiss()
+                },
+                enabled = fieldValue.text.isNotBlank(),
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MentionSuggestions(
+    suggestions: List<User>,
+    onSelect: (User?) -> Unit,
+) {
+    Surface(
+        shadowElevation = 4.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(null) }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(Modifier.width(38.dp))
+                Text("@all", style = MaterialTheme.typography.bodyMedium)
+            }
+            suggestions.forEach { user ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(user) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AsyncImage(
+                        model = user.avatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(user.displayName, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }
@@ -202,19 +376,24 @@ private fun MessageGroup(
     ownAvatarUrl: String?,
     senderAvatarUrl: String?,
     senderName: String,
+    displayNames: Set<String>,
 ) {
     val lastMessage = group.messages.last()
     val timestamp = remember(lastMessage.createdAt) {
         runCatching { timeFmt.format(java.time.OffsetDateTime.parse(lastMessage.createdAt)) }.getOrDefault("")
     }
     val avatarUrl = if (isOwn) ownAvatarUrl else senderAvatarUrl
+    val mentionColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+    val mentionBg = if (isOwn)
+        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+    else
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isOwn) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Top,
     ) {
-        // Avatar on left for others
         if (!isOwn) {
             AsyncImage(
                 model = avatarUrl,
@@ -225,7 +404,6 @@ private fun MessageGroup(
             Spacer(Modifier.width(8.dp))
         }
 
-        // All bubbles + name + timestamp in one column
         Column(
             horizontalAlignment = if (isOwn) Alignment.End else Alignment.Start,
             modifier = Modifier.widthIn(max = 280.dp),
@@ -240,6 +418,9 @@ private fun MessageGroup(
                 )
             }
             group.messages.forEach { message ->
+                val annotated = remember(message.content, displayNames, mentionColor, mentionBg) {
+                    buildMessageText(message.content, displayNames, mentionColor, mentionBg)
+                }
                 Surface(
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
@@ -250,10 +431,11 @@ private fun MessageGroup(
                     color = if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                 ) {
                     Text(
-                        message.content,
+                        annotated,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
                 if (message != lastMessage) Spacer(Modifier.height(2.dp))
@@ -270,7 +452,6 @@ private fun MessageGroup(
             )
         }
 
-        // Avatar on right for own
         if (isOwn) {
             Spacer(Modifier.width(8.dp))
             AsyncImage(

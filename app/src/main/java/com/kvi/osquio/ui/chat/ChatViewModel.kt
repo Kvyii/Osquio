@@ -34,6 +34,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _hasUnread = MutableStateFlow(false)
     val hasUnread = _hasUnread.asStateFlow()
 
+    private val _mentionSuggestions = MutableStateFlow<List<User>>(emptyList())
+    val mentionSuggestions = _mentionSuggestions.asStateFlow()
+
+    private val _confirmedMentions = MutableStateFlow<Set<String>>(emptySet())
+    val confirmedMentions = _confirmedMentions.asStateFlow()
+
     private var realtimeJob: Job? = null
     private val channel = supabase.channel("chat")
 
@@ -46,8 +52,22 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = ChatUiState.Loaded(messages, users)
                 updateUnreadBadge(messages)
                 subscribeToRealtime()
+                listenForRefreshSignal()
             } catch (e: Exception) {
                 _state.value = ChatUiState.Error(e.message ?: "Failed to load chat")
+            }
+        }
+    }
+
+    private fun listenForRefreshSignal() {
+        viewModelScope.launch {
+            ChatRepository.refreshSignal.collect {
+                val current = _state.value as? ChatUiState.Loaded ?: return@collect
+                try {
+                    val messages = ChatRepository.getMessages()
+                    _state.value = current.copy(messages = messages)
+                    updateUnreadBadge(messages)
+                } catch (_: Exception) {}
             }
         }
     }
@@ -67,6 +87,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }.getOrNull()
                     if (newMessage != null) {
+                        if (current.messages.any { it.id == newMessage.id }) return@collect
                         val updated = current.messages + newMessage
                         _state.value = current.copy(messages = updated)
                         updateUnreadBadge(updated)
@@ -83,16 +104,64 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun sendMessage(userId: String, content: String) {
+    fun onInputChanged(text: String) {
+        val users = (_state.value as? ChatUiState.Loaded)?.users?.values?.toList() ?: return
+
+        // Prune confirmed mentions no longer present in text
+        val current = _confirmedMentions.value
+        if (current.isNotEmpty()) {
+            _confirmedMentions.value = current.filter { name ->
+                text.contains("@$name")
+            }.toSet()
+        }
+
+        val atIndex = text.lastIndexOf('@')
+        if (atIndex == -1) {
+            _mentionSuggestions.value = emptyList()
+            return
+        }
+        val afterAt = text.substring(atIndex + 1)
+        if (afterAt.isEmpty() || afterAt.contains(' ')) {
+            _mentionSuggestions.value = emptyList()
+            return
+        }
+        _mentionSuggestions.value = users.filter {
+            it.displayName.startsWith(afterAt, ignoreCase = true)
+        }
+    }
+
+    fun confirmMention(displayName: String) {
+        _confirmedMentions.value = _confirmedMentions.value + displayName
+    }
+
+    fun dismissSuggestions() {
+        _mentionSuggestions.value = emptyList()
+    }
+
+    fun sendMessage(userId: String, senderName: String, content: String) {
         val trimmed = content.trim()
         if (trimmed.isEmpty()) return
+        val users = (_state.value as? ChatUiState.Loaded)?.users?.values?.toList() ?: emptyList()
+        val mentions = _confirmedMentions.value
+        _confirmedMentions.value = emptySet()
         viewModelScope.launch {
             try {
-                ChatRepository.sendMessage(userId, trimmed)
-                val messages = ChatRepository.getMessages()
+                val message = ChatRepository.sendMessage(userId, trimmed)
                 val current = _state.value as? ChatUiState.Loaded ?: return@launch
-                _state.value = current.copy(messages = messages)
+                _state.value = current.copy(messages = current.messages + message)
                 markRead()
+                if (mentions.isNotEmpty()) {
+                    val mentionedIds = if (mentions.contains("all")) {
+                        listOf("all")
+                    } else {
+                        mentions.mapNotNull { name -> users.firstOrNull { it.displayName == name }?.id }
+                    }
+                    if (mentionedIds.isNotEmpty()) {
+                        try {
+                            ChatRepository.notifyMentions(userId, senderName, message.id, mentionedIds)
+                        } catch (_: Exception) {}
+                    }
+                }
             } catch (_: Exception) {}
         }
     }

@@ -239,7 +239,7 @@ private fun BeaconCard(summon: SummonHistory) {
                         val readyAt = runCatching { responseTime?.let { Instant.parse(it) } }.getOrNull()
                         if (createdAt != null && readyAt != null) {
                             val mins = ((readyAt.epochSecond - createdAt.epochSecond) / 60).toInt().coerceAtLeast(0)
-                            "+$mins"
+                            if (mins > 0) "+$mins" else null
                         } else null
                     } else null
                     ResponseAvatar(avatarUrl = avatarUrl, tintColor = tint, label = label)

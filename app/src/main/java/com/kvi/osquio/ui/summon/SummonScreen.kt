@@ -284,7 +284,9 @@ private fun RsvpRow(user: User?, rsvp: Rsvp) {
             val label = when (rsvp.response) {
                 "yes" -> "Yes"
                 "no" -> "No"
-                "yes_at_time" -> "Maybe at ${rsvp.responseTime?.let { timeFmt.format(Instant.parse(it)) } ?: "?"}"
+
+                "yes_at_time" -> rsvp.responseTime?.let { "Maybe at ${timeFmt.format(Instant.parse(it))}" } ?: "Maybe"
+
                 else -> rsvp.response
             }
             Text(label)
@@ -316,23 +318,27 @@ private fun UserRow(user: User) {
 @Composable
 private fun YesAtTimePicker(
     gameInstant: Instant?,
-    onConfirm: (Instant) -> Unit,
+    onConfirm: (Instant?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val now = Instant.now()
     val maxMinutes = if (gameInstant != null) {
         ((gameInstant.epochSecond - now.epochSecond) / 60).toInt().coerceIn(5, 60)
     } else 60
-    val steps = (5..maxMinutes step 5).toList().ifEmpty { listOf(5) }
-    var selectedOffset by remember { mutableStateOf(steps.first()) }
+    val steps = listOf(0) + (5..maxMinutes step 5).toList().ifEmpty { listOf(5) }
+    var selectedOffset by remember { mutableStateOf(0) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Maybe at what time?") },
         text = {
             Column {
-                val targetInstant = now.plusSeconds(selectedOffset * 60L)
-                Text("I'll be ready at ${timeFmt.format(targetInstant)}")
+                if (selectedOffset == 0) {
+                    Text("Maybe")
+                } else {
+                    val targetInstant = now.plusSeconds(selectedOffset * 60L)
+                    Text("I'll be ready at ${timeFmt.format(targetInstant)}")
+                }
                 Spacer(Modifier.height(8.dp))
                 Slider(
                     value = steps.indexOf(selectedOffset).toFloat(),
@@ -344,13 +350,15 @@ private fun YesAtTimePicker(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("5 min", style = MaterialTheme.typography.labelSmall)
+                    Text("Maybe", style = MaterialTheme.typography.labelSmall)
                     Text("$maxMinutes min", style = MaterialTheme.typography.labelSmall)
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(now.plusSeconds(selectedOffset * 60L)) }) { Text("Confirm") }
+            TextButton(onClick = {
+                onConfirm(if (selectedOffset == 0) null else now.plusSeconds(selectedOffset * 60L))
+            }) { Text("Confirm") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
