@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           message: {
             token: user.fcm_token,
-            android: { priority: 'high' },
+            android: { priority: 'normal' },
             data: {
               type: 'mention',
               sender_name,
