@@ -193,13 +193,42 @@ private fun ChatContent(
 
     val chatItems = remember(messages) { buildChatItems(messages) }
 
-    LaunchedEffect(chatItems.size) {
-        if (chatItems.isNotEmpty()) listState.animateScrollToItem(chatItems.size - 1)
+    val isPinnedToBottom by remember {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            val last = layout.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
+            last.index >= layout.totalItemsCount - 1
+        }
     }
 
-    val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-    LaunchedEffect(lastVisibleIndex) {
-        if (chatItems.isNotEmpty() && lastVisibleIndex == chatItems.size - 1) onScrolledToBottom()
+    var previousSize by remember { mutableIntStateOf(0) }
+    val lastOwnMessageId = remember(messages) {
+        messages.lastOrNull { it.userId == currentUser.id }?.id
+    }
+
+    LaunchedEffect(chatItems.size) {
+        if (chatItems.isEmpty()) {
+            previousSize = 0
+            return@LaunchedEffect
+        }
+        val grew = chatItems.size > previousSize
+        val isInitialLoad = previousSize == 0
+        previousSize = chatItems.size
+        if (isInitialLoad) {
+            listState.scrollToItem(chatItems.size - 1)
+        } else if (grew && isPinnedToBottom) {
+            listState.animateScrollToItem(chatItems.size - 1)
+        }
+    }
+
+    LaunchedEffect(lastOwnMessageId) {
+        if (lastOwnMessageId != null && chatItems.isNotEmpty()) {
+            listState.animateScrollToItem(chatItems.size - 1)
+        }
+    }
+
+    LaunchedEffect(isPinnedToBottom, chatItems.size) {
+        if (isPinnedToBottom && chatItems.isNotEmpty()) onScrolledToBottom()
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
