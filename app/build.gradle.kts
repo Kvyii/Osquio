@@ -21,8 +21,8 @@ android {
         applicationId = "com.kvi.osquio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.2.7"
+        versionCode = 20
+        versionName = "1.2.8"
 
         buildConfigField("String", "SUPABASE_URL", "\"${localProperties["SUPABASE_URL"] ?: ""}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProperties["SUPABASE_ANON_KEY"] ?: ""}\"")
