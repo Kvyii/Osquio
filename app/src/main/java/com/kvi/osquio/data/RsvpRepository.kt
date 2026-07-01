@@ -18,12 +18,18 @@ object RsvpRepository {
 
     private val httpClient = HttpClient(OkHttp)
 
+    private val locallyResponded = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    fun hasRespondedLocally(summonId: String): Boolean = locallyResponded.contains(summonId)
+
     suspend fun rsvpsForSummon(summonId: String): List<Rsvp> =
         supabase.from("rsvps").select {
             filter { eq("summon_id", summonId) }
         }.decodeList<Rsvp>()
 
     suspend fun upsertRsvp(summonId: String, userId: String, response: String, responseTime: String?) {
+        // Mark before the HTTP call so any FCM that arrives during the round-trip is suppressed.
+        locallyResponded.add(summonId)
         val token = supabase.auth.currentSessionOrNull()?.accessToken ?: return
         val body = buildJsonObject {
             put("summon_id", summonId)

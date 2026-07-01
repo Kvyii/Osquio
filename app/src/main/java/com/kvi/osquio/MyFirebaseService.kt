@@ -53,6 +53,7 @@ class MyFirebaseService : FirebaseMessagingService() {
                     message.notification?.body ?: "Someone is calling for a game. You in?"
 
                 if (summonId != null) {
+                    if (RsvpRepository.hasRespondedLocally(summonId)) return
                     serviceScope.launch {
                         try {
                             val user = UserRepository.currentUser()
