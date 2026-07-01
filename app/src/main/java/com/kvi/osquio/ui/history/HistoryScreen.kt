@@ -235,10 +235,10 @@ private fun BeaconCard(summon: SummonHistory) {
                     }
                     val label = if (response == "yes_at_time") {
                         val responseTime = r["response_time"]?.jsonPrimitive?.content
-                        val createdAt = runCatching { Instant.parse(summon.createdAt) }.getOrNull()
+                        val gameTime = runCatching { Instant.parse(summon.gameTime) }.getOrNull()
                         val readyAt = runCatching { responseTime?.let { Instant.parse(it) } }.getOrNull()
-                        if (createdAt != null && readyAt != null) {
-                            val mins = ((readyAt.epochSecond - createdAt.epochSecond) / 60).toInt().coerceAtLeast(0)
+                        if (gameTime != null && readyAt != null) {
+                            val mins = ((readyAt.epochSecond - gameTime.epochSecond) / 60).toInt().coerceAtLeast(0)
                             if (mins > 0) "+$mins" else null
                         } else null
                     } else null

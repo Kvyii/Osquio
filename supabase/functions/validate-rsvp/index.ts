@@ -26,10 +26,6 @@ Deno.serve(async (req) => {
     return jsonError('Invalid response value. Must be yes, no, or yes_at_time')
   }
 
-  if (response === 'yes_at_time' && !response_time) {
-    return jsonError('response_time is required when response is yes_at_time')
-  }
-
   // Fetch the summon to validate it is still open
   const { data: summon, error: summonError } = await supabase
     .from('summons')
@@ -45,12 +41,12 @@ Deno.serve(async (req) => {
     return jsonError('Summon is no longer open')
   }
 
-  // Validate yes_at_time window
+  // yes_at_time may carry a response_time in [game_time, game_time + 60min], or null (hard maybe).
   if (response === 'yes_at_time' && response_time) {
     const gameTime = new Date(summon.game_time).getTime()
     const rsvpTime = new Date(response_time).getTime()
-    if (rsvpTime > gameTime) {
-      return jsonError('yes_at_time response_time cannot be after game_time')
+    if (rsvpTime < gameTime || rsvpTime > gameTime + 60 * 60 * 1000) {
+      return jsonError('yes_at_time response_time must be within 60 minutes after game_time')
     }
   }
 

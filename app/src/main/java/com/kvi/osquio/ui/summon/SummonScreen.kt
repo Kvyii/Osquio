@@ -9,6 +9,7 @@ import com.kvi.osquio.R
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -199,11 +200,11 @@ private fun LobbyContent(
                 listOf(
                     Triple("yes", "Yes", { onRsvp("yes", null) }),
                     Triple("no", "No", { onRsvp("no", null) }),
-                    Triple("yes_at_time", "Maybe at...", { showTimePickerForYesAt = true }),
+                    Triple("yes_at_time", "Maybe", { showTimePickerForYesAt = true }),
                 ).forEach { (response, label, action) ->
                     if (myResponse == response) {
                         Button(
-                            onClick = {},
+                            onClick = if (response == "yes_at_time") action else ({}),
                             modifier = Modifier.weight(1f),
                         ) { Text(label) }
                     } else {
@@ -215,55 +216,58 @@ private fun LobbyContent(
                 }
             }
         }
-        if (myRsvp != null) {
-            val responseLabel = myRsvp.response.replace("_", " ")
-            val timeLabel = myRsvp.responseTime?.let { t -> " (${timeFmt.format(Instant.parse(t))})" } ?: ""
-            Text(
-                "Your response: $responseLabel$timeLabel",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-        HorizontalDivider()
-        Spacer(Modifier.height(8.dp))
-        Text("Responses", style = MaterialTheme.typography.titleSmall)
-
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(lobby.rsvps) { rsvp ->
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (myRsvp != null) {
+                item {
+                    val responseLabel = myRsvp.response.replace("_", " ")
+                    val timeLabel = myRsvp.responseTime?.let { t -> " (${timeFmt.format(Instant.parse(t))})" } ?: ""
+                    Text(
+                        "Your response: $responseLabel$timeLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            item {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Text("Responses", style = MaterialTheme.typography.titleSmall)
+            }
+            items(lobby.rsvps, key = { it.userId }) { rsvp ->
                 val user = lobby.allUsers.firstOrNull { it.id == rsvp.userId }
                 RsvpRow(user, rsvp)
             }
             if (nonRespondents.isNotEmpty()) {
                 item { Text("No response yet", style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(vertical = 8.dp)) }
-                items(nonRespondents) { user ->
+                items(nonRespondents, key = { it.id }) { user ->
                     UserRow(user)
                 }
             }
-        }
-
-        if (canCancel) {
-            Spacer(Modifier.height(8.dp))
-            val rebeaconCooldown = lobby.rebeaconCooldownSeconds
-            val rebeaconExhausted = lobby.rebeaconUsedInWindow >= 5
-            val rebeaconLabel = when {
-                !currentUser.isAdmin && rebeaconExhausted -> "Re-beacon (limit reached)"
-                !currentUser.isAdmin && rebeaconCooldown > 0L -> "Re-beacon (${rebeaconCooldown}s)"
-                else -> "Re-beacon"
+            if (canCancel) {
+                item {
+                    Spacer(Modifier.height(16.dp))
+                    val rebeaconCooldown = lobby.rebeaconCooldownSeconds
+                    val rebeaconExhausted = lobby.rebeaconUsedInWindow >= 5
+                    val rebeaconLabel = when {
+                        !currentUser.isAdmin && rebeaconExhausted -> "Re-beacon (limit reached)"
+                        !currentUser.isAdmin && rebeaconCooldown > 0L -> "Re-beacon (${rebeaconCooldown}s)"
+                        else -> "Re-beacon"
+                    }
+                    OutlinedButton(
+                        onClick = onRebeacon,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = currentUser.isAdmin || (rebeaconCooldown <= 0L && !rebeaconExhausted),
+                    ) { Text(rebeaconLabel) }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Cancel Beacon") }
+                }
             }
-            OutlinedButton(
-                onClick = onRebeacon,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = currentUser.isAdmin || (rebeaconCooldown <= 0L && !rebeaconExhausted),
-            ) { Text(rebeaconLabel) }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = onCancel,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            ) { Text("Cancel Beacon") }
         }
     }
 
@@ -297,7 +301,8 @@ private fun RsvpRow(user: User?, rsvp: Rsvp) {
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
             )
-        }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }
 
@@ -311,7 +316,8 @@ private fun UserRow(user: User) {
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
             )
-        }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }
 
@@ -321,43 +327,51 @@ private fun YesAtTimePicker(
     onConfirm: (Instant?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val now = Instant.now()
-    val maxMinutes = if (gameInstant != null) {
-        ((gameInstant.epochSecond - now.epochSecond) / 60).toInt().coerceIn(5, 60)
-    } else 60
-    val steps = listOf(0) + (5..maxMinutes step 5).toList().ifEmpty { listOf(5) }
-    var selectedOffset by remember { mutableStateOf(0) }
+    val offsetSteps = listOf(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60)
+    var sliderPos by remember { mutableStateOf(0) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Maybe at what time?") },
+        title = { Text("Maybe") },
         text = {
             Column {
-                if (selectedOffset == 0) {
-                    Text("Maybe")
-                } else {
-                    val targetInstant = now.plusSeconds(selectedOffset * 60L)
-                    Text("I'll be ready at ${timeFmt.format(targetInstant)}")
+                when {
+                    sliderPos == 0 -> Text("Maybe")
+                    gameInstant != null -> {
+                        val offsetMin = offsetSteps[sliderPos - 1]
+                        val targetInstant = gameInstant.plusSeconds(offsetMin * 60L)
+                        val suffix = if (offsetMin == 0) "" else " (+$offsetMin min)"
+                        Text("Ready at ${timeFmt.format(targetInstant)}$suffix")
+                    }
+                    else -> Text("Maybe")
                 }
                 Spacer(Modifier.height(8.dp))
-                Slider(
-                    value = steps.indexOf(selectedOffset).toFloat(),
-                    onValueChange = { selectedOffset = steps[it.toInt()] },
-                    valueRange = 0f..(steps.size - 1).toFloat(),
-                    steps = (steps.size - 2).coerceAtLeast(0),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("Maybe", style = MaterialTheme.typography.labelSmall)
-                    Text("$maxMinutes min", style = MaterialTheme.typography.labelSmall)
+                if (gameInstant != null) {
+                    val totalPositions = offsetSteps.size + 1
+                    Slider(
+                        value = sliderPos.toFloat(),
+                        onValueChange = { sliderPos = it.toInt() },
+                        valueRange = 0f..(totalPositions - 1).toFloat(),
+                        steps = totalPositions - 2,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Maybe", style = MaterialTheme.typography.labelSmall)
+                        Text("+60 min", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onConfirm(if (selectedOffset == 0) null else now.plusSeconds(selectedOffset * 60L))
+                val time = if (sliderPos == 0 || gameInstant == null) {
+                    null
+                } else {
+                    gameInstant.plusSeconds(offsetSteps[sliderPos - 1] * 60L)
+                }
+                onConfirm(time)
             }) { Text("Confirm") }
         },
         dismissButton = {
