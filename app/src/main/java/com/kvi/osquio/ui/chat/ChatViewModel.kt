@@ -148,7 +148,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val message = ChatRepository.sendMessage(userId, trimmed)
                 val current = _state.value as? ChatUiState.Loaded ?: return@launch
-                _state.value = current.copy(messages = current.messages + message)
+                if (current.messages.none { it.id == message.id }) {
+                    _state.value = current.copy(messages = current.messages + message)
+                }
                 markRead()
                 if (mentions.isNotEmpty()) {
                     val mentionedIds = if (mentions.contains("all")) {
