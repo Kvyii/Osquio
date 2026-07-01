@@ -27,7 +27,7 @@ import coil.compose.AsyncImage
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(ZoneId.systemDefault())
+private val dateFmt = DateTimeFormatter.ofPattern("dd/MM").withZone(ZoneId.systemDefault())
 
 @Composable
 fun StatsScreen(onNavigateToSettings: () -> Unit = {}, vm: StatsViewModel = viewModel()) {
@@ -122,7 +122,7 @@ private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp, s
                     buildAnnotatedString {
                         append(stat.user.displayName)
                         withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontWeight = FontWeight.Normal, fontSize = MaterialTheme.typography.labelSmall.fontSize)) {
-                            append(" (deceased - last seen $lastSeenLabel)")
+                            append(" (deceased: last seen $lastSeenLabel)")
                         }
                     },
                     style = MaterialTheme.typography.bodyMedium,
