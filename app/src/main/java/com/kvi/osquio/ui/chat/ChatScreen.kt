@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -19,12 +21,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -98,21 +102,42 @@ private fun buildStyledInput(text: String, confirmedMentions: Set<String>, menti
     }
 }
 
-private fun buildMessageText(content: String, displayNames: Set<String>, mentionColor: Color, mentionBg: Color): AnnotatedString {
-    val regex = Regex("@(\\S+)")
+private val urlRegex = Regex("(https?://\\S+|www\\.\\S+)")
+private val mentionRegex = Regex("@(\\S+)")
+
+private fun buildMessageText(
+    content: String,
+    displayNames: Set<String>,
+    mentionColor: Color,
+    mentionBg: Color,
+    linkColor: Color,
+): AnnotatedString {
+    val matches = (mentionRegex.findAll(content).map { it to false } + urlRegex.findAll(content).map { it to true })
+        .sortedBy { it.first.range.first }
+
     return buildAnnotatedString {
         var last = 0
-        regex.findAll(content).forEach { match ->
-            val name = match.groupValues[1]
-            val isValid = name.equals("all", ignoreCase = true) ||
-                displayNames.any { it.equals(name, ignoreCase = true) }
+        for ((match, isUrl) in matches) {
+            if (match.range.first < last) continue // skip overlapping match
             append(content.substring(last, match.range.first))
-            if (isValid) {
-                withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.Bold, background = mentionBg)) {
+            if (isUrl) {
+                val url = if (match.value.startsWith("http")) match.value else "https://${match.value}"
+                pushStringAnnotation(tag = "URL", annotation = url)
+                withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) {
                     append(match.value)
                 }
+                pop()
             } else {
-                append(match.value)
+                val name = match.groupValues[1]
+                val isValid = name.equals("all", ignoreCase = true) ||
+                    displayNames.any { it.equals(name, ignoreCase = true) }
+                if (isValid) {
+                    withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.Bold, background = mentionBg)) {
+                        append(match.value)
+                    }
+                } else {
+                    append(match.value)
+                }
             }
             last = match.range.last + 1
         }
@@ -417,6 +442,8 @@ private fun MessageGroup(
         MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
     else
         MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+    val linkColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+    val uriHandler = LocalUriHandler.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -447,8 +474,8 @@ private fun MessageGroup(
                 )
             }
             group.messages.forEach { message ->
-                val annotated = remember(message.content, displayNames, mentionColor, mentionBg) {
-                    buildMessageText(message.content, displayNames, mentionColor, mentionBg)
+                val annotated = remember(message.content, displayNames, mentionColor, mentionBg, linkColor) {
+                    buildMessageText(message.content, displayNames, mentionColor, mentionBg, linkColor)
                 }
                 Surface(
                     shape = RoundedCornerShape(
@@ -459,13 +486,20 @@ private fun MessageGroup(
                     ),
                     color = if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                 ) {
-                    Text(
-                        annotated,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
+                    SelectionContainer {
+                        ClickableText(
+                            annotated,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                            onClick = { offset ->
+                                annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.let {
+                                    uriHandler.openUri(it.item)
+                                }
+                            },
+                        )
+                    }
                 }
                 if (message != lastMessage) Spacer(Modifier.height(2.dp))
             }
