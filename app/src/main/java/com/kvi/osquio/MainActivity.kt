@@ -189,9 +189,9 @@ private fun AppRoot() {
     if (showNotificationWarning && changelogNotes == null) {
         AlertDialog(
             onDismissRequest = { showNotificationWarning = false },
-            title = { Text("Notification permissions reset") },
+            title = { Text("Notifications are now on mute") },
             text = {
-                Text("Alarm-style notifications may have been reset after this update. Please re-enable them in Settings → Notifications.")
+                Text("All notifications are now on mute by default. Visit the settings page to set your preferences on how you want to be annoyed.")
             },
             confirmButton = {
                 TextButton(onClick = { showNotificationWarning = false }) { Text("OK") }

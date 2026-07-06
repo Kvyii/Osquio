@@ -1,5 +1,6 @@
 package com.kvi.osquio.ui.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
@@ -7,11 +8,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -25,9 +29,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kvi.osquio.data.model.User
+import com.kvi.osquio.notifications.DiscreteSound
+import com.kvi.osquio.notifications.DndWindow
+import com.kvi.osquio.notifications.LoudSound
+import com.kvi.osquio.notifications.NotificationPreferences
 import com.kvi.osquio.ui.theme.AppTheme
 import com.kvi.osquio.ui.theme.ThemeManager
 import com.kvi.osquio.ui.settings.UpdateState
+import java.time.DayOfWeek
 
 @Composable
 fun SettingsScreen(currentUser: User, onSignOut: () -> Unit, onBack: () -> Unit = {}, vm: SettingsViewModel = viewModel()) {
@@ -86,7 +95,7 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
         }
 
         // Notifications
-        NotificationsCard()
+        NotificationsCard(prefs = state.notifPrefs, vm = vm)
 
         // Theme picker
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -217,7 +226,7 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
 }
 
 @Composable
-private fun NotificationsCard() {
+private fun NotificationsCard(prefs: NotificationPreferences, vm: SettingsViewModel) {
     val context = LocalContext.current
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -266,6 +275,178 @@ private fun NotificationsCard() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Alert sound", style = MaterialTheme.typography.titleMedium)
+                Switch(checked = prefs.soundEnabled, onCheckedChange = { vm.setSoundEnabled(it) })
+            }
+            Text(
+                "The sound to play when a beacon is received",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (prefs.soundEnabled) {
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LoudSound.entries.forEach { sound ->
+                        FilterChip(
+                            selected = prefs.loudSound == sound,
+                            onClick = {
+                                vm.setLoudSound(sound)
+                                playPreview(context, sound.resId)
+                            },
+                            label = { Text(sound.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Discrete mode", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Quieter sound Mon–Fri, 8:30am–5:30pm",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = prefs.discreteModeEnabled, onCheckedChange = { vm.setDiscreteModeEnabled(it) })
+                }
+                if (prefs.discreteModeEnabled) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DiscreteSound.entries.forEach { sound ->
+                            FilterChip(
+                                selected = prefs.discreteSound == sound,
+                                onClick = {
+                                    vm.setDiscreteSound(sound)
+                                    playPreview(context, sound.resId)
+                                },
+                                label = { Text(sound.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            Text("Do Not Disturb", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "During these windows the app makes no sound, but Beacons still appear.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            prefs.dndWindows.forEachIndexed { index, window ->
+                DndWindowRow(
+                    window = window,
+                    onChange = { vm.updateDndWindow(index, it) },
+                    onDelete = { vm.removeDndWindow(index) },
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            if (prefs.dndWindows.size < 5) {
+                OutlinedButton(onClick = { vm.addDndWindow() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Add DND window (${prefs.dndWindows.size}/5)")
+                }
+            }
         }
+    }
+}
+
+private fun playPreview(context: android.content.Context, soundResId: Int, volume: Float = 1.0f) {
+    val player = MediaPlayer()
+    player.setAudioAttributes(
+        AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+    )
+    val afd = context.resources.openRawResourceFd(soundResId) ?: return
+    afd.use { player.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
+    player.setOnCompletionListener { it.release() }
+    player.prepare()
+    player.setVolume(volume, volume)
+    player.start()
+}
+
+private val DAY_LABELS = listOf("Su", "M", "Tu", "W", "Th", "F", "Sa")
+private val DAY_VALUES = listOf(7, 1, 2, 3, 4, 5, 6) // DayOfWeek.value: Su=7, M=1..Sa=6
+
+@Composable
+private fun DndWindowRow(window: DndWindow, onChange: (DndWindow) -> Unit, onDelete: () -> Unit) {
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.medium)
+            .padding(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = window.enabled, onCheckedChange = { onChange(window.copy(enabled = it)) })
+            TextButton(onClick = { showStartPicker = true }) {
+                Text("%02d:%02d".format(window.startHour, window.startMinute))
+            }
+            Text("–", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { showEndPicker = true }) {
+                Text("%02d:%02d".format(window.endHour, window.endMinute))
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Close, contentDescription = "Remove DND window")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            DAY_LABELS.forEachIndexed { i, label ->
+                val dayValue = DAY_VALUES[i]
+                FilterChip(
+                    selected = dayValue in window.days,
+                    onClick = {
+                        val newDays = if (dayValue in window.days) window.days - dayValue else window.days + dayValue
+                        onChange(window.copy(days = newDays))
+                    },
+                    label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
+    }
+
+    if (showStartPicker) {
+        TimePickerDialog(
+            initialHour = window.startHour,
+            initialMinute = window.startMinute,
+            onDismiss = { showStartPicker = false },
+            onConfirm = { h, m ->
+                onChange(window.copy(startHour = h, startMinute = m))
+                showStartPicker = false
+            },
+        )
+    }
+    if (showEndPicker) {
+        TimePickerDialog(
+            initialHour = window.endHour,
+            initialMinute = window.endMinute,
+            onDismiss = { showEndPicker = false },
+            onConfirm = { h, m ->
+                onChange(window.copy(endHour = h, endMinute = m))
+                showEndPicker = false
+            },
+        )
     }
 }

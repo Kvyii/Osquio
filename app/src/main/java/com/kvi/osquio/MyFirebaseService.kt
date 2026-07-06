@@ -1,13 +1,9 @@
 package com.kvi.osquio
 
-import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -17,6 +13,9 @@ import com.kvi.osquio.data.ChatRepository
 import com.kvi.osquio.data.RsvpRepository
 import com.kvi.osquio.data.SummonRepository
 import com.kvi.osquio.data.UserRepository
+import com.kvi.osquio.notifications.NotificationChannelManager
+import com.kvi.osquio.notifications.NotificationPrefsRepository
+import com.kvi.osquio.notifications.decide
 import com.kvi.osquio.ui.beacon.BeaconAlertActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -85,23 +84,9 @@ class MyFirebaseService : FirebaseMessagingService() {
     }
 
     private fun showNotification(title: String, body: String, summonId: String?) {
-        val alertChannelId = "beacon_alert_channel"
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        val soundUri = Uri.parse("android.resource://${packageName}/${R.raw.beacon_sound}")
-        val audioAttr = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        val vibration = longArrayOf(0, 500, 200, 500, 200, 500, 200, 1000)
-
-        val alertChannel = NotificationChannel(alertChannelId, "Beacon Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
-            setSound(soundUri, audioAttr)
-            enableVibration(true)
-            vibrationPattern = vibration
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        }
-        manager.createNotificationChannel(alertChannel)
+        val prefs = NotificationPrefsRepository.load(applicationContext)
+        val alertChannelId = NotificationChannelManager.beaconChannelIdFor(prefs.decide(), prefs)
 
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -154,10 +139,9 @@ class MyFirebaseService : FirebaseMessagingService() {
     }
 
     private fun showMentionNotification(title: String, body: String) {
-        val channelId = "mention_channel"
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(channelId, "Mentions", NotificationManager.IMPORTANCE_DEFAULT)
-        manager.createNotificationChannel(channel)
+        val prefs = NotificationPrefsRepository.load(applicationContext)
+        val channelId = NotificationChannelManager.mentionChannelIdFor(prefs.decide())
 
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
