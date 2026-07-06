@@ -10,6 +10,11 @@ import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.data.model.Config
 import com.kvi.osquio.data.model.User
 import com.kvi.osquio.data.supabase
+import com.kvi.osquio.notifications.DiscreteSound
+import com.kvi.osquio.notifications.DndWindow
+import com.kvi.osquio.notifications.LoudSound
+import com.kvi.osquio.notifications.NotificationPreferences
+import com.kvi.osquio.notifications.NotificationPrefsRepository
 import com.kvi.osquio.ui.theme.AppTheme
 import com.kvi.osquio.ui.theme.ThemeManager
 import com.kvi.osquio.util.SteamApi
@@ -18,6 +23,8 @@ import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+private const val MAX_DND_WINDOWS = 5
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -32,6 +39,7 @@ sealed interface SettingsUiState {
         val currentUser: User,
         val config: Config,
         val allUsers: List<User>,
+        val notifPrefs: NotificationPreferences,
         val message: String? = null,
         val updateState: UpdateState = UpdateState.Idle,
     ) : SettingsUiState
@@ -48,7 +56,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val config = ConfigRepository.getConfig()
                 val allUsers = UserRepository.allUsers()
-                _state.value = SettingsUiState.Loaded(currentUser, config, allUsers)
+                val notifPrefs = NotificationPrefsRepository.load(getApplication())
+                _state.value = SettingsUiState.Loaded(currentUser, config, allUsers, notifPrefs)
             } catch (e: Exception) {
                 _state.value = SettingsUiState.Error(e.message ?: "Failed to load settings")
             }
@@ -106,6 +115,39 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         ThemeManager.current = theme
         getApplication<android.app.Application>().getSharedPreferences("prefs", Context.MODE_PRIVATE)
             .edit().putString("theme", theme.name).apply()
+    }
+
+    fun setSoundEnabled(enabled: Boolean) = updatePrefs { it.copy(soundEnabled = enabled) }
+
+    fun setLoudSound(sound: LoudSound) = updatePrefs { it.copy(loudSoundKey = sound.key) }
+
+    fun setDiscreteModeEnabled(enabled: Boolean) = updatePrefs { it.copy(discreteModeEnabled = enabled) }
+
+    fun setDiscreteSound(sound: DiscreteSound) = updatePrefs { it.copy(discreteSoundKey = sound.key) }
+
+    fun addDndWindow() = updatePrefs { prefs ->
+        if (prefs.dndWindows.size >= MAX_DND_WINDOWS) return@updatePrefs prefs
+        val newWindow = DndWindow(startHour = 22, startMinute = 0, endHour = 7, endMinute = 0, days = (1..7).toSet())
+        prefs.copy(dndWindows = prefs.dndWindows + newWindow)
+    }
+
+    fun updateDndWindow(index: Int, window: DndWindow) = updatePrefs { prefs ->
+        prefs.copy(dndWindows = prefs.dndWindows.toMutableList().apply {
+            if (index in indices) this[index] = window
+        })
+    }
+
+    fun removeDndWindow(index: Int) = updatePrefs { prefs ->
+        prefs.copy(dndWindows = prefs.dndWindows.toMutableList().apply {
+            if (index in indices) removeAt(index)
+        })
+    }
+
+    private fun updatePrefs(transform: (NotificationPreferences) -> NotificationPreferences) {
+        val current = _state.value as? SettingsUiState.Loaded ?: return
+        val updated = transform(current.notifPrefs)
+        NotificationPrefsRepository.save(getApplication(), updated)
+        _state.value = current.copy(notifPrefs = updated)
     }
 
     fun checkAndInstallUpdate() {
