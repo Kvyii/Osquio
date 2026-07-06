@@ -22,6 +22,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private val activityTimeFmt = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.systemDefault())
+
+private fun formatResponseLabel(response: String, responseTime: String?): String = when (response) {
+    "yes" -> "Yes"
+    "no" -> "No"
+    "yes_at_time" -> responseTime?.let { "Maybe at ${activityTimeFmt.format(Instant.parse(it))}" } ?: "Maybe"
+    else -> response
+}
 
 class MyFirebaseService : FirebaseMessagingService() {
 
@@ -37,6 +49,30 @@ class MyFirebaseService : FirebaseMessagingService() {
                 } else {
                     val senderName = message.data["sender_name"] ?: "Someone"
                     showMentionNotification("@mention", "Message from $senderName")
+                }
+            }
+            "rsvp_activity" -> {
+                val isForegrounded = ProcessLifecycleOwner.get().lifecycle.currentState
+                    .isAtLeast(Lifecycle.State.STARTED)
+                if (!isForegrounded) {
+                    val responderName = message.data["responder_name"] ?: "Someone"
+                    val subtype = message.data["subtype"]
+                    val response = message.data["response"] ?: "yes"
+                    val responseTime = message.data["response_time"]?.takeIf { it.isNotEmpty() }
+                    val label = formatResponseLabel(response, responseTime)
+                    val body = if (subtype == "changed")
+                        "$responderName changed their response to $label"
+                    else
+                        "$responderName responded with $label"
+                    showMentionNotification("Beacon Update", body, 1003)
+                }
+            }
+            "summon_cancelled" -> {
+                val isForegrounded = ProcessLifecycleOwner.get().lifecycle.currentState
+                    .isAtLeast(Lifecycle.State.STARTED)
+                if (!isForegrounded) {
+                    val cancellerName = message.data["canceller_name"] ?: "Someone"
+                    showMentionNotification("Beacon Update", "$cancellerName has cancelled the beacon", 1004)
                 }
             }
             else -> {
@@ -138,7 +174,7 @@ class MyFirebaseService : FirebaseMessagingService() {
         manager.notify(1001, builder.build())
     }
 
-    private fun showMentionNotification(title: String, body: String) {
+    private fun showMentionNotification(title: String, body: String, notificationId: Int = 1002) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val prefs = NotificationPrefsRepository.load(applicationContext)
         val channelId = NotificationChannelManager.mentionChannelIdFor(prefs.decide())
@@ -159,7 +195,7 @@ class MyFirebaseService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .build()
 
-        manager.notify(1002, notification)
+        manager.notify(notificationId, notification)
     }
 
     override fun onDestroy() {
