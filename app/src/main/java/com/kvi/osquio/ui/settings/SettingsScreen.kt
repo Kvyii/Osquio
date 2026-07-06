@@ -2,6 +2,7 @@ package com.kvi.osquio.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
@@ -412,7 +413,10 @@ private fun DndWindowRow(window: DndWindow, onChange: (DndWindow) -> Unit, onDel
                 Icon(Icons.Default.Close, contentDescription = "Remove DND window")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             DAY_LABELS.forEachIndexed { i, label ->
                 val dayValue = DAY_VALUES[i]
                 FilterChip(
@@ -422,6 +426,13 @@ private fun DndWindowRow(window: DndWindow, onChange: (DndWindow) -> Unit, onDel
                         onChange(window.copy(days = newDays))
                     },
                     label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.height(28.dp),
+                    shape = MaterialTheme.shapes.small,
+                    colors = FilterChipDefaults.filterChipColors(),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = dayValue in window.days,
+                    ),
                 )
             }
         }
