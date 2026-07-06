@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import com.kvi.osquio.data.RsvpRepository
 import com.kvi.osquio.data.UserRepository
+import com.kvi.osquio.notifications.RsvpSoundPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +24,8 @@ class RsvpActionReceiver : BroadcastReceiver() {
                 RsvpRepository.upsertRsvp(summonId, user.id, response, null)
             } catch (_: Exception) {}
         }
+
+        RsvpSoundPlayer.playForResponse(context.applicationContext, response)
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(1001)

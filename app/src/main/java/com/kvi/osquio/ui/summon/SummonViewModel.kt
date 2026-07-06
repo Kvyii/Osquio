@@ -13,6 +13,7 @@ import com.kvi.osquio.data.model.Rsvp
 import com.kvi.osquio.data.model.Summon
 import com.kvi.osquio.data.model.User
 import com.kvi.osquio.data.supabase
+import com.kvi.osquio.notifications.RsvpSoundPlayer
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
@@ -282,6 +283,7 @@ class SummonViewModel(app: Application) : AndroidViewModel(app) {
 
     fun submitRsvp(summonId: String, userId: String, response: String, responseTime: Instant?) {
         val current = _state.value as? SummonUiState.ActiveLobby ?: return
+        RsvpSoundPlayer.playForResponse(getApplication(), response)
         val optimisticRsvp = Rsvp(
             summonId = summonId,
             userId = userId,

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.kvi.osquio.R
 import com.kvi.osquio.data.RsvpRepository
 import com.kvi.osquio.data.UserRepository
+import com.kvi.osquio.notifications.RsvpSoundPlayer
 import com.kvi.osquio.ui.theme.OsquioTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +67,7 @@ class BeaconAlertActivity : ComponentActivity() {
     }
 
     private fun submitRsvp(summonId: String, response: String) {
+        RsvpSoundPlayer.playForResponse(applicationContext, response)
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             try {
                 val user = UserRepository.currentUser()
