@@ -15,6 +15,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.kvi.osquio.data.ChatRepository
 import com.kvi.osquio.data.RsvpRepository
+import com.kvi.osquio.data.SummonRepository
 import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.ui.beacon.BeaconAlertActivity
 import kotlinx.coroutines.CoroutineScope
@@ -55,6 +56,8 @@ class MyFirebaseService : FirebaseMessagingService() {
                 if (summonId != null) {
                     serviceScope.launch {
                         try {
+                            val activeSummon = SummonRepository.activeSummon()
+                            if (activeSummon == null || activeSummon.id != summonId) return@launch
                             val user = UserRepository.currentUser()
                             val rsvps = RsvpRepository.rsvpsForSummon(summonId)
                             val alreadyResponded = rsvps.any { it.userId == user.id }
