@@ -1,9 +1,23 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { GoogleAuth } from 'https://esm.sh/google-auth-library@9'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SERVICE_ROLE_KEY')!,
 )
+
+const serviceAccount = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!)
+const projectId = serviceAccount.project_id
+
+async function getFcmAccessToken(): Promise<string> {
+  const auth = new GoogleAuth({
+    credentials: serviceAccount,
+    scopes: ['https://www.googleapis.com/auth/firebase.messaging'],
+  })
+  const client = await auth.getClient()
+  const token = await client.getAccessToken()
+  return token.token!
+}
 
 function jsonError(message: string, status = 400) {
   return new Response(JSON.stringify({ error: message }), {
@@ -50,6 +64,14 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Look up any prior response so we can tell "first response" from "changed response"
+  const { data: priorRsvp } = await supabase
+    .from('rsvps')
+    .select('response')
+    .eq('summon_id', summon_id)
+    .eq('user_id', user_id)
+    .maybeSingle()
+
   // Upsert the RSVP
   const { error: upsertError } = await supabase.from('rsvps').upsert(
     {
@@ -65,6 +87,54 @@ Deno.serve(async (req) => {
   if (upsertError) {
     console.error('RSVP upsert failed:', upsertError)
     return new Response(JSON.stringify({ error: upsertError.message }), { status: 500 })
+  }
+
+  // Notify other participants, unless this is a no-op re-submission of the same response
+  const subtype = priorRsvp == null ? 'first' : (priorRsvp.response !== response ? 'changed' : null)
+  if (subtype != null) {
+    const { data: responder } = await supabase
+      .from('users')
+      .select('display_name')
+      .eq('id', user_id)
+      .single()
+
+    const { data: recipients } = await supabase
+      .from('users')
+      .select('id, fcm_token')
+      .not('fcm_token', 'is', null)
+      .neq('id', user_id)
+
+    if (recipients && recipients.length > 0) {
+      const accessToken = await getFcmAccessToken()
+      await Promise.allSettled(
+        recipients.map((recipient) =>
+          fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              message: {
+                token: recipient.fcm_token,
+                android: { priority: 'high' },
+                data: {
+                  type: 'rsvp_activity',
+                  subtype,
+                  responder_name: responder?.display_name ?? 'Someone',
+                  response,
+                  response_time: response === 'yes_at_time' ? (response_time ?? '') : '',
+                },
+              },
+            }),
+          }).then((res) => {
+            if (!res.ok) {
+              console.error(`FCM send failed for token ${recipient.fcm_token}:`, res.status)
+            }
+          })
+        )
+      )
+    }
   }
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 })

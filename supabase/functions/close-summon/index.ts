@@ -1,9 +1,23 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { GoogleAuth } from 'https://esm.sh/google-auth-library@9'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SERVICE_ROLE_KEY')!,
 )
+
+const serviceAccount = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!)
+const projectId = serviceAccount.project_id
+
+async function getFcmAccessToken(): Promise<string> {
+  const auth = new GoogleAuth({
+    credentials: serviceAccount,
+    scopes: ['https://www.googleapis.com/auth/firebase.messaging'],
+  })
+  const client = await auth.getClient()
+  const token = await client.getAccessToken()
+  return token.token!
+}
 
 Deno.serve(async (req) => {
   const { record, old_record } = await req.json()
@@ -95,6 +109,51 @@ Deno.serve(async (req) => {
       .from('users')
       .update({ cooldown_until: cooldownUntil })
       .eq('id', record.created_by)
+
+    // Notify other participants that the beacon was cancelled
+    if (record.cancelled_by) {
+      const { data: canceller } = await supabase
+        .from('users')
+        .select('display_name')
+        .eq('id', record.cancelled_by)
+        .single()
+
+      const { data: recipients } = await supabase
+        .from('users')
+        .select('id, fcm_token')
+        .not('fcm_token', 'is', null)
+        .neq('id', record.cancelled_by)
+
+      if (recipients && recipients.length > 0) {
+        const accessToken = await getFcmAccessToken()
+        await Promise.allSettled(
+          recipients.map((recipient) =>
+            fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                message: {
+                  token: recipient.fcm_token,
+                  android: { priority: 'high' },
+                  data: {
+                    type: 'summon_cancelled',
+                    canceller_name: canceller?.display_name ?? 'Someone',
+                    summon_id: summonId,
+                  },
+                },
+              }),
+            }).then((res) => {
+              if (!res.ok) {
+                console.error(`FCM send failed for token ${recipient.fcm_token}:`, res.status)
+              }
+            })
+          )
+        )
+      }
+    }
   }
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 })
