@@ -80,6 +80,7 @@ class RankingsViewModel : ViewModel() {
         val ignored = mutableMapOf<User, Int>()
         val rejected = mutableMapOf<User, Int>()
         val attended = mutableMapOf<User, Int>()
+        val maybes = mutableMapOf<User, Int>()
         val responseTimes = mutableMapOf<User, MutableList<Long>>()
 
         filtered.forEach { history ->
@@ -96,10 +97,14 @@ class RankingsViewModel : ViewModel() {
                 val uid = r.jsonObject["user_id"]?.jsonPrimitive?.content ?: return@forEach
                 val user = allUsers.firstOrNull { it.id == uid } ?: return@forEach
                 val response = r.jsonObject["response"]?.jsonPrimitive?.content
-                when (response) {
-                    "no" -> rejected[user] = (rejected[user] ?: 0) + 1
-                    "yes", "yes_at_time" -> if (uid != history.summonerId) {
-                        attended[user] = (attended[user] ?: 0) + 1
+                if (uid != history.summonerId) {
+                    when (response) {
+                        "no" -> rejected[user] = (rejected[user] ?: 0) + 1
+                        "yes" -> attended[user] = (attended[user] ?: 0) + 1
+                        "yes_at_time" -> {
+                            attended[user] = (attended[user] ?: 0) + 1
+                            maybes[user] = (maybes[user] ?: 0) + 1
+                        }
                     }
                 }
                 val respondedAt = r.jsonObject["responded_at"]?.jsonPrimitive?.content
@@ -133,6 +138,7 @@ class RankingsViewModel : ViewModel() {
         val attendedPodium = topThreeDescending(attended, { "$it 'yes' responses" }, 0)
         val ignoredPodium = topThreeDescending(ignored, { "$it ignored beacons" }, 0)
         val rejectedPodium = topThreeDescending(rejected, { "$it 'no' responses" }, 0)
+        val indecisivePodium = topThreeDescending(maybes, { "$it 'maybe' responses" }, 0)
         val fastestPodium = run {
             val sorted = responseTimes.entries
                 .filter { it.value.isNotEmpty() }
@@ -154,7 +160,16 @@ class RankingsViewModel : ViewModel() {
             result
         }
 
-        val badges = listOf(
+        // Disabled for now — not pulling its weight as a badge, but kept wired for a possible future re-enable.
+        val indecisiveBadgeEnabled = false
+        val indecisiveBadge = Badge(
+            R.drawable.rune_indecisive, "Most Indecisive",
+            maybes.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key,
+            maybes.maxByOrNull { it.value }?.let { "${it.value} 'maybe' responses" } ?: "No data",
+            indecisivePodium,
+        )
+
+        val badges = listOfNotNull(
             Badge(
                 R.drawable.rune_double_damage, "Most Beacons",
                 summonsSent.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key,
@@ -182,6 +197,7 @@ class RankingsViewModel : ViewModel() {
                 ignored.maxByOrNull { it.value }?.let { "${it.value} ignored beacons" } ?: "No data",
                 ignoredPodium,
             ),
+            indecisiveBadge.takeIf { indecisiveBadgeEnabled },
             Badge(
                 R.drawable.rune_water, "Biggest Chud",
                 rejected.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key,

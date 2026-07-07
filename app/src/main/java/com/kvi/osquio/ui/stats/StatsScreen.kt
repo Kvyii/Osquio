@@ -62,7 +62,7 @@ fun StatsScreen(onNavigateToSettings: () -> Unit = {}, vm: StatsViewModel = view
                 }
                 Spacer(Modifier.height(16.dp))
                 val avatarSize = 56.dp
-                val columns = listOf("Sent" to StatColumn.SENT, "Yes" to StatColumn.YES, "No" to StatColumn.NO, "Ignored" to StatColumn.IGNORED)
+                val columns = listOf("Sent" to StatColumn.SENT, "Yes" to StatColumn.YES, "Maybe" to StatColumn.MAYBE, "No" to StatColumn.NO, "Ignored" to StatColumn.IGNORED)
                 Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                     Spacer(Modifier.width(avatarSize + 10.dp))
                     columns.forEach { (label, column) ->
@@ -140,6 +140,7 @@ private fun StatsRow(stat: UserStats, avatarSize: androidx.compose.ui.unit.Dp, s
                 listOf(
                     stat.summonsSent to StatColumn.SENT,
                     stat.accepted to StatColumn.YES,
+                    stat.maybe to StatColumn.MAYBE,
                     stat.rejected to StatColumn.NO,
                     stat.ignored to StatColumn.IGNORED,
                 ).forEach { (value, column) ->
