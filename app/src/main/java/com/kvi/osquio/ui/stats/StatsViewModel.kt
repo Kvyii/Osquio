@@ -21,13 +21,14 @@ data class UserStats(
     val user: User,
     val summonsSent: Int,
     val accepted: Int,
+    val maybe: Int,
     val rejected: Int,
     val ignored: Int,
     val isDeceased: Boolean = false,
     val lastSeenAt: Instant? = null,
 )
 
-enum class StatColumn { SENT, YES, NO, IGNORED }
+enum class StatColumn { SENT, YES, MAYBE, NO, IGNORED }
 enum class SortDirection { DESC, ASC, NONE }
 
 sealed interface StatsUiState {
@@ -98,8 +99,9 @@ class StatsViewModel : ViewModel() {
 
         val stats = allUsers.map { user ->
             val sent = filtered.count { it.summonerId == user.id }
-            var accepted = 0; var rejected = 0; var ignored = 0
+            var accepted = 0; var maybe = 0; var rejected = 0; var ignored = 0
             filtered.forEach { history ->
+                if (history.summonerId == user.id) return@forEach
                 val respondents = history.snapshot["respondents"] as? JsonArray ?: return@forEach
                 val nonRespondents = history.snapshot["non_respondents"] as? JsonArray ?: return@forEach
                 val myResponse = respondents.firstOrNull {
@@ -107,7 +109,8 @@ class StatsViewModel : ViewModel() {
                 }
                 if (myResponse != null) {
                     when (myResponse.jsonObject["response"]?.jsonPrimitive?.content) {
-                        "yes", "yes_at_time" -> accepted++
+                        "yes" -> accepted++
+                        "yes_at_time" -> maybe++
                         "no" -> rejected++
                     }
                 } else if (nonRespondents.any {
@@ -140,7 +143,7 @@ class StatsViewModel : ViewModel() {
                 }
             }
 
-            UserStats(user, sent, accepted, rejected, ignored, isDeceased = ignoreStreak >= 5, lastSeenAt = lastSeenAt)
+            UserStats(user, sent, accepted, maybe, rejected, ignored, isDeceased = ignoreStreak >= 5, lastSeenAt = lastSeenAt)
         }
 
         val defaultSorted = stats.sortedWith(
@@ -156,6 +159,7 @@ class StatsViewModel : ViewModel() {
             sortDirection == SortDirection.DESC -> when (sortColumn) {
                 StatColumn.SENT -> defaultSorted.sortedByDescending { it.summonsSent }
                 StatColumn.YES -> defaultSorted.sortedByDescending { it.accepted }
+                StatColumn.MAYBE -> defaultSorted.sortedByDescending { it.maybe }
                 StatColumn.NO -> defaultSorted.sortedByDescending { it.rejected }
                 StatColumn.IGNORED -> defaultSorted.sortedByDescending { it.ignored }
                 null -> defaultSorted
@@ -163,6 +167,7 @@ class StatsViewModel : ViewModel() {
             else -> when (sortColumn) {
                 StatColumn.SENT -> defaultSorted.sortedBy { it.summonsSent }
                 StatColumn.YES -> defaultSorted.sortedBy { it.accepted }
+                StatColumn.MAYBE -> defaultSorted.sortedBy { it.maybe }
                 StatColumn.NO -> defaultSorted.sortedBy { it.rejected }
                 StatColumn.IGNORED -> defaultSorted.sortedBy { it.ignored }
                 null -> defaultSorted
