@@ -67,7 +67,7 @@ private fun SettingsContent(state: SettingsUiState.Loaded, vm: SettingsViewModel
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import com.kvi.osquio.data.model.Message
 import com.kvi.osquio.data.model.User
 import java.time.LocalDate
@@ -172,8 +173,15 @@ fun ChatScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
+            ) {
                 Text("Chat", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
                 IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
             }
@@ -239,66 +247,95 @@ private fun ChatContent(
 
     val chatItems = remember(messages) { buildChatItems(messages) }
 
+    val reversedItems = remember(chatItems) { chatItems.asReversed() }
+
     val isPinnedToBottom by remember {
-        derivedStateOf {
-            val layout = listState.layoutInfo
-            val last = layout.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-            last.index >= layout.totalItemsCount - 1
-        }
+        derivedStateOf { listState.firstVisibleItemIndex == 0 }
     }
 
     var previousSize by remember { mutableIntStateOf(0) }
+    var unseenBelow by remember { mutableIntStateOf(0) }
     val lastOwnMessageId = remember(messages) {
         messages.lastOrNull { it.userId == currentUser.id }?.id
     }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(chatItems.size) {
         if (chatItems.isEmpty()) {
             previousSize = 0
+            unseenBelow = 0
             return@LaunchedEffect
         }
         val grew = chatItems.size > previousSize
-        val isInitialLoad = previousSize == 0
+        val delta = chatItems.size - previousSize
         previousSize = chatItems.size
-        if (isInitialLoad) {
-            listState.scrollToItem(chatItems.size - 1)
-        } else if (grew && isPinnedToBottom) {
-            listState.animateScrollToItem(chatItems.size - 1)
+        if (grew && !isPinnedToBottom) {
+            unseenBelow += delta
         }
     }
 
     LaunchedEffect(lastOwnMessageId) {
         if (lastOwnMessageId != null && chatItems.isNotEmpty()) {
-            listState.animateScrollToItem(chatItems.size - 1)
+            listState.animateScrollToItem(0)
         }
     }
 
     LaunchedEffect(isPinnedToBottom, chatItems.size) {
-        if (isPinnedToBottom && chatItems.isNotEmpty()) onScrolledToBottom()
+        if (isPinnedToBottom && chatItems.isNotEmpty()) {
+            unseenBelow = 0
+            onScrolledToBottom()
+        }
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(chatItems, key = {
-                when (it) {
-                    is ChatItem.DateHeader -> "date-${it.date}"
-                    is ChatItem.Group -> it.messages.first().id
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                reverseLayout = true,
+            ) {
+                items(reversedItems, key = {
+                    when (it) {
+                        is ChatItem.DateHeader -> "date-${it.date}"
+                        is ChatItem.Group -> it.messages.first().id
+                    }
+                }) { item ->
+                    when (item) {
+                        is ChatItem.DateHeader -> DateDivider(item.date)
+                        is ChatItem.Group -> MessageGroup(
+                            group = item,
+                            isOwn = item.userId == currentUser.id,
+                            ownAvatarUrl = currentUser.avatarUrl,
+                            senderAvatarUrl = users[item.userId]?.avatarUrl,
+                            senderName = users[item.userId]?.displayName ?: "Unknown",
+                            displayNames = displayNames,
+                        )
+                    }
                 }
-            }) { item ->
-                when (item) {
-                    is ChatItem.DateHeader -> DateDivider(item.date)
-                    is ChatItem.Group -> MessageGroup(
-                        group = item,
-                        isOwn = item.userId == currentUser.id,
-                        ownAvatarUrl = currentUser.avatarUrl,
-                        senderAvatarUrl = users[item.userId]?.avatarUrl,
-                        senderName = users[item.userId]?.displayName ?: "Unknown",
-                        displayNames = displayNames,
+            }
+
+            if (unseenBelow > 0) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                        .clickable {
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(0)
+                            }
+                        },
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primary,
+                    tonalElevation = 4.dp,
+                    shadowElevation = 4.dp,
+                ) {
+                    Text(
+                        text = if (unseenBelow == 1) "1 new message ↓" else "$unseenBelow new messages ↓",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
             }
@@ -349,8 +386,7 @@ private fun ChatContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-                .imePadding(),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val textStyle = MaterialTheme.typography.bodyLarge.copy(

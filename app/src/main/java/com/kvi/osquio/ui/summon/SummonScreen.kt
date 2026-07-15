@@ -88,7 +88,7 @@ private fun SummonCreationContent(
     val inCooldown = cooldownRemaining > 0L
 
     Box(
-        modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 24.dp, end = 24.dp, bottom = 24.dp),
+        modifier = Modifier.fillMaxSize().padding(top = 12.dp, start = 24.dp, end = 24.dp, bottom = 24.dp),
     ) {
         val effectiveMinutes = minutes.coerceAtLeast(1)
         val gameInstant = Instant.now().plusSeconds(effectiveMinutes * 60L)
@@ -195,7 +195,7 @@ private fun LobbyContent(
 
     var showTimePickerForYesAt by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
         Text("Active Beacon", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Text(
