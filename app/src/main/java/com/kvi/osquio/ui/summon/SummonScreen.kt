@@ -1,5 +1,6 @@
 package com.kvi.osquio.ui.summon
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +10,9 @@ import com.kvi.osquio.R
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -21,6 +24,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val timeFmt = DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.systemDefault())
+
+private val QUICK_MINUTES = listOf(15, 30, 45, 60)
 
 @Composable
 fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
@@ -69,6 +74,7 @@ fun SummonScreen(currentUser: User, vm: SummonViewModel = viewModel()) {
     } // Scaffold
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SummonCreationContent(
     currentUser: User,
@@ -77,13 +83,15 @@ private fun SummonCreationContent(
     isCreating: Boolean,
     onSummon: (Instant) -> Unit,
 ) {
-    var selectedMinutes by remember { mutableStateOf(30) }
+    var minutes by remember { mutableStateOf(30) }
+    val selectedQuick = minutes.takeIf { it in QUICK_MINUTES }
     val inCooldown = cooldownRemaining > 0L
 
     Box(
         modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 24.dp, end = 24.dp, bottom = 24.dp),
     ) {
-        val gameInstant = Instant.now().plusSeconds(selectedMinutes * 60L)
+        val effectiveMinutes = minutes.coerceAtLeast(1)
+        val gameInstant = Instant.now().plusSeconds(effectiveMinutes * 60L)
 
         Column(
             modifier = Modifier.align(Alignment.Center),
@@ -102,23 +110,32 @@ private fun SummonCreationContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf(15 to "in 15 mins", 30 to "in 30 mins", 60 to "in 1 hour").forEach { (mins, label) ->
-                    if (selectedMinutes == mins) {
+                QUICK_MINUTES.forEach { m ->
+                    val label = if (m == 60) "1h" else "${m}m"
+                    if (selectedQuick == m) {
                         Button(
-                            onClick = { selectedMinutes = mins },
+                            onClick = { minutes = m },
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(vertical = 16.dp),
                         ) { Text(label, style = MaterialTheme.typography.titleMedium) }
                     } else {
                         OutlinedButton(
-                            onClick = { selectedMinutes = mins },
+                            onClick = { minutes = m },
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(vertical = 16.dp),
                         ) { Text(label, style = MaterialTheme.typography.titleMedium) }
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+            Slider(
+                value = minutes.toFloat(),
+                onValueChange = { minutes = kotlin.math.round(it).toInt().coerceIn(0, 60) },
+                valueRange = 0f..60f,
+                steps = 59,
+                track = { TieredTrack(it) },
+            )
+            Spacer(Modifier.height(8.dp))
             Text(
                 "Game at — ${timeFmt.format(gameInstant)}",
                 style = MaterialTheme.typography.titleMedium,
@@ -378,4 +395,64 @@ private fun YesAtTimePicker(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TieredTrack(sliderState: SliderState) {
+    val activeColor = MaterialTheme.colorScheme.primary
+    val inactiveColor = MaterialTheme.colorScheme.surfaceVariant
+    val tickColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Canvas(
+        modifier = Modifier.fillMaxWidth().height(24.dp),
+    ) {
+        val trackY = size.height / 2f
+        val trackStroke = 4.dp.toPx()
+        val leftPad = 8.dp.toPx()
+        val rightPad = 8.dp.toPx()
+        val usable = size.width - leftPad - rightPad
+
+        val range = sliderState.valueRange
+        val span = (range.endInclusive - range.start).coerceAtLeast(1f)
+        fun xFor(m: Int) = leftPad + usable * ((m - range.start) / span)
+
+        val thumbX = xFor(kotlin.math.round(sliderState.value).toInt())
+
+        drawLine(
+            color = activeColor,
+            start = Offset(leftPad, trackY),
+            end = Offset(thumbX, trackY),
+            strokeWidth = trackStroke,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = inactiveColor,
+            start = Offset(thumbX, trackY),
+            end = Offset(size.width - rightPad, trackY),
+            strokeWidth = trackStroke,
+            cap = StrokeCap.Round,
+        )
+
+        val smallTick = 4.dp.toPx()
+        val mediumTick = 7.dp.toPx()
+        val largeTick = 10.dp.toPx()
+        val tickWidth = 1.5.dp.toPx()
+
+        for (m in 0..60) {
+            val (halfHeight, alpha) = when {
+                m == 0 || m == 30 || m == 60 -> largeTick / 2f to 1f
+                m == 15 || m == 45 -> mediumTick / 2f to 0.85f
+                m % 5 == 0 -> smallTick / 2f to 0.55f
+                else -> continue
+            }
+            drawLine(
+                color = tickColor.copy(alpha = alpha),
+                start = Offset(xFor(m), trackY - halfHeight),
+                end = Offset(xFor(m), trackY + halfHeight),
+                strokeWidth = tickWidth,
+                cap = StrokeCap.Round,
+            )
+        }
+    }
 }
