@@ -5,6 +5,7 @@ import com.kvi.osquio.data.model.Message
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.storage.storage
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.request.bearerAuth
@@ -35,11 +36,18 @@ object ChatRepository {
             limit(MESSAGE_LIMIT)
         }.decodeList<Message>().reversed()
 
-    suspend fun sendMessage(userId: String, content: String): Message =
+    suspend fun uploadImage(userId: String, bytes: ByteArray, extension: String): String {
+        val path = "$userId/${java.util.UUID.randomUUID()}.$extension"
+        supabase.storage.from("chat-images").upload(path, bytes)
+        return supabase.storage.from("chat-images").publicUrl(path)
+    }
+
+    suspend fun sendMessage(userId: String, content: String?, imageUrl: String? = null): Message =
         supabase.from("messages").insert(
             mapOf(
                 "user_id" to userId,
                 "content" to content,
+                "image_url" to imageUrl,
             )
         ) { select() }.decodeSingle<Message>()
 
