@@ -1,5 +1,9 @@
 package com.kvi.osquio.ui.chat
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,9 +13,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +34,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
@@ -154,36 +162,43 @@ fun ChatScreen(
     val state by vm.state.collectAsState()
     val mentionSuggestions by vm.mentionSuggestions.collectAsState()
     val confirmedMentions by vm.confirmedMentions.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) { vm.load() }
+    LaunchedEffect(Unit) {
+        vm.imageSendError.collect { msg -> snackbarHostState.showSnackbar(msg) }
+    }
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
-            Text("Chat", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
-        }
+    Box(Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
+                Text("Chat", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
+            }
 
-        when (val s = state) {
-            is ChatUiState.Loading -> Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
-                CircularProgressIndicator()
+            when (val s = state) {
+                is ChatUiState.Loading -> Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                is ChatUiState.Error -> Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+                    Text(s.message, color = MaterialTheme.colorScheme.error)
+                }
+                is ChatUiState.Loaded -> ChatContent(
+                    messages = s.messages,
+                    users = s.users,
+                    currentUser = currentUser,
+                    mentionSuggestions = mentionSuggestions,
+                    confirmedMentions = confirmedMentions,
+                    onInputChanged = { vm.onInputChanged(it) },
+                    onConfirmMention = { vm.confirmMention(it) },
+                    onMentionDismiss = { vm.dismissSuggestions() },
+                    onSend = { text, uri -> vm.sendMessage(currentUser.id, currentUser.displayName, text, uri) },
+                    onScrolledToBottom = { vm.markRead() },
+                    modifier = Modifier.weight(1f),
+                )
             }
-            is ChatUiState.Error -> Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
-                Text(s.message, color = MaterialTheme.colorScheme.error)
-            }
-            is ChatUiState.Loaded -> ChatContent(
-                messages = s.messages,
-                users = s.users,
-                currentUser = currentUser,
-                mentionSuggestions = mentionSuggestions,
-                confirmedMentions = confirmedMentions,
-                onInputChanged = { vm.onInputChanged(it) },
-                onConfirmMention = { vm.confirmMention(it) },
-                onMentionDismiss = { vm.dismissSuggestions() },
-                onSend = { vm.sendMessage(currentUser.id, currentUser.displayName, it) },
-                onScrolledToBottom = { vm.markRead() },
-                modifier = Modifier.weight(1f),
-            )
         }
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -197,7 +212,7 @@ private fun ChatContent(
     onInputChanged: (String) -> Unit,
     onConfirmMention: (String) -> Unit,
     onMentionDismiss: () -> Unit,
-    onSend: (String) -> Unit,
+    onSend: (String, Uri?) -> Unit,
     onScrolledToBottom: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -210,6 +225,10 @@ private fun ChatContent(
     var fieldValue by remember {
         mutableStateOf(TextFieldValue(""))
     }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> selectedImageUri = uri }
 
     fun rebuildField(text: String, cursorPos: Int, mentions: Set<String>): TextFieldValue {
         val annotated = buildStyledInput(text, mentions, mentionColor, mentionBg)
@@ -302,14 +321,46 @@ private fun ChatContent(
         }
 
         HorizontalDivider()
+
+        selectedImageUri?.let { uri ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box {
+                    AsyncImage(
+                        model = uri,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)),
+                    )
+                    IconButton(
+                        onClick = { selectedImageUri = null },
+                        modifier = Modifier.size(20.dp).align(Alignment.TopEnd),
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Remove image", modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .imePadding(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             val charCount = fieldValue.text.length
+
+            IconButton(onClick = {
+                pickImageLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }) {
+                Icon(Icons.Default.Image, contentDescription = "Attach image")
+            }
 
             Box(
                 modifier = Modifier
@@ -337,6 +388,7 @@ private fun ChatContent(
                         textStyle = textStyle,
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     if (charCount >= 160) {
@@ -351,11 +403,12 @@ private fun ChatContent(
             Spacer(Modifier.width(8.dp))
             IconButton(
                 onClick = {
-                    onSend(fieldValue.text)
+                    onSend(fieldValue.text, selectedImageUri)
                     fieldValue = TextFieldValue(AnnotatedString(""))
+                    selectedImageUri = null
                     onMentionDismiss()
                 },
-                enabled = fieldValue.text.isNotBlank(),
+                enabled = fieldValue.text.isNotBlank() || selectedImageUri != null,
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
             }
@@ -474,9 +527,6 @@ private fun MessageGroup(
                 )
             }
             group.messages.forEach { message ->
-                val annotated = remember(message.content, displayNames, mentionColor, mentionBg, linkColor) {
-                    buildMessageText(message.content, displayNames, mentionColor, mentionBg, linkColor)
-                }
                 Surface(
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
@@ -486,19 +536,38 @@ private fun MessageGroup(
                     ),
                     color = if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                 ) {
-                    SelectionContainer {
-                        ClickableText(
-                            annotated,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                            onClick = { offset ->
-                                annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.let {
-                                    uriHandler.openUri(it.item)
-                                }
-                            },
-                        )
+                    Column {
+                        message.imageUrl?.let { url ->
+                            AsyncImage(
+                                model = url,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .widthIn(max = 260.dp)
+                                    .heightIn(max = 260.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .padding(4.dp),
+                            )
+                        }
+                        if (!message.content.isNullOrBlank()) {
+                            val annotated = remember(message.content, displayNames, mentionColor, mentionBg, linkColor) {
+                                buildMessageText(message.content, displayNames, mentionColor, mentionBg, linkColor)
+                            }
+                            SelectionContainer {
+                                ClickableText(
+                                    annotated,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        color = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    onClick = { offset ->
+                                        annotated.getStringAnnotations("URL", offset, offset).firstOrNull()?.let {
+                                            uriHandler.openUri(it.item)
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
                 if (message != lastMessage) Spacer(Modifier.height(2.dp))

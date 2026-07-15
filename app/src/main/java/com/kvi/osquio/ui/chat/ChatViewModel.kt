@@ -2,6 +2,9 @@ package com.kvi.osquio.ui.chat
 
 import android.app.Application
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kvi.osquio.data.ChatRepository
@@ -9,12 +12,16 @@ import com.kvi.osquio.data.UserRepository
 import com.kvi.osquio.data.model.Message
 import com.kvi.osquio.data.model.User
 import com.kvi.osquio.data.supabase
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -39,6 +46,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _confirmedMentions = MutableStateFlow<Set<String>>(emptySet())
     val confirmedMentions = _confirmedMentions.asStateFlow()
+
+    private val _imageSendError = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val imageSendError = _imageSendError.asSharedFlow()
 
     private var realtimeJob: Job? = null
     private val channel = supabase.channel("chat")
@@ -138,15 +148,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _mentionSuggestions.value = emptyList()
     }
 
-    fun sendMessage(userId: String, senderName: String, content: String) {
+    fun sendMessage(userId: String, senderName: String, content: String, imageUri: Uri? = null) {
         val trimmed = content.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty() && imageUri == null) return
         val users = (_state.value as? ChatUiState.Loaded)?.users?.values?.toList() ?: emptyList()
         val mentions = _confirmedMentions.value
         _confirmedMentions.value = emptySet()
         viewModelScope.launch {
             try {
-                val message = ChatRepository.sendMessage(userId, trimmed)
+                val imageUrl = imageUri?.let { uri -> uploadChatImage(userId, uri) }
+                val message = ChatRepository.sendMessage(userId, trimmed.ifEmpty { null }, imageUrl)
                 val current = _state.value as? ChatUiState.Loaded ?: return@launch
                 if (current.messages.none { it.id == message.id }) {
                     _state.value = current.copy(messages = current.messages + message)
@@ -164,8 +175,47 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         } catch (_: Exception) {}
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                if (imageUri != null) {
+                    val msg = if (e is RestException && e.statusCode == 413) {
+                        "Photo is too large to send (max 12MB) - it was resized but is still over the limit."
+                    } else {
+                        "Couldn't send photo - check your connection and try again."
+                    }
+                    _imageSendError.tryEmit(msg)
+                }
+            }
         }
+    }
+
+    private suspend fun uploadChatImage(userId: String, uri: Uri): String? {
+        val resolver = getApplication<Application>().contentResolver
+        val originalBytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        val bitmap = BitmapFactory.decodeByteArray(originalBytes, 0, originalBytes.size) ?: return null
+        val maxDim = 1080
+        val smallSizeThreshold = 500 * 1024 // 500KB
+        val alreadySmall = maxOf(bitmap.width, bitmap.height) <= maxDim &&
+            originalBytes.size <= smallSizeThreshold
+        val bytes: ByteArray
+        val ext: String
+        if (alreadySmall) {
+            // Small, already-reasonable image (e.g. a meme, a small screenshot) - upload as-is.
+            // Avoids a needless JPEG re-encode that would flatten PNG transparency and can
+            // occasionally grow an already-compressed file.
+            bytes = originalBytes
+            ext = resolver.getType(uri)?.substringAfter("/") ?: "jpg"
+        } else {
+            val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
+            val scaled = if (scale < 1f) {
+                Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+            } else bitmap
+            bytes = ByteArrayOutputStream().use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                out.toByteArray()
+            }
+            ext = "jpg"
+        }
+        return ChatRepository.uploadImage(userId, bytes, ext)
     }
 
     fun markRead() {

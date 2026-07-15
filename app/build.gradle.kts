@@ -21,8 +21,8 @@ android {
         applicationId = "com.kvi.osquio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 22
-        versionName = "1.3.1"
+        versionCode = 23
+        versionName = "1.4.0-beta"
 
         buildConfigField("String", "SUPABASE_URL", "\"${localProperties["SUPABASE_URL"] ?: ""}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProperties["SUPABASE_ANON_KEY"] ?: ""}\"")
@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.supabase.realtime)
     implementation(libs.supabase.auth)
     implementation(libs.supabase.functions)
+    implementation(libs.supabase.storage)
     implementation(libs.ktor.client.okhttp)
 
     implementation(platform(libs.firebase.bom))
