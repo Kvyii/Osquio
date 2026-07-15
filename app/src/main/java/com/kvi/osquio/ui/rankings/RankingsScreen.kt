@@ -29,7 +29,7 @@ fun RankingsScreen(onNavigateToSettings: () -> Unit = {}, vm: RankingsViewModel 
 
     LaunchedEffect(Unit) { vm.load() }
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Rankings", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
             IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }

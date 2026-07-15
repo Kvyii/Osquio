@@ -3,6 +3,5 @@
     <style name="Theme.Osquio" parent="android:Theme.Material.Light.NoActionBar" />
     <style name="Theme.Osquio.Splash" parent="Theme.Osquio">
         <item name="android:windowBackground">@drawable/splash_background</item>
-        <item name="android:windowFullscreen">true</item>
     </style>
 </resources>

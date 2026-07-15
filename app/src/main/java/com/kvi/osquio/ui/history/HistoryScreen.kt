@@ -64,7 +64,7 @@ private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (Local
     var displayMonth by remember { mutableStateOf(YearMonth.now()) }
     val today = LocalDate.now()
 
-    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, bottom = 8.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = 12.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
             Text("History", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
             IconButton(onClick = onNavigateToSettings) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
@@ -172,7 +172,7 @@ private fun CalendarView(summonsPerDay: Map<LocalDate, Int>, onSelectDay: (Local
 
 @Composable
 private fun HistoryDayScreen(day: LocalDate, summons: List<SummonHistory>, onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, bottom = 16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(top = 12.dp, bottom = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
             Text(dateFmt.format(day.atStartOfDay(ZoneId.systemDefault())), style = MaterialTheme.typography.headlineSmall)

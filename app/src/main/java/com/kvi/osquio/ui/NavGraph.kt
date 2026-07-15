@@ -1,6 +1,8 @@
 package com.kvi.osquio.ui
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.DateRange
@@ -48,29 +50,32 @@ fun MainNavGraph(currentUser: User, onSignOut: () -> Unit) {
     LaunchedEffect(Unit) { chatVm.load() }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.statusBars,
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f)) {
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentRoute == tab.route,
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = {
-                            if (tab.route == "chat") {
-                                BadgedBox(badge = { if (hasUnread) Badge(containerColor = MaterialTheme.colorScheme.primary) }) {
+            if (currentRoute != "chat") {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f)) {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = currentRoute == tab.route,
+                            onClick = {
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {
+                                if (tab.route == "chat") {
+                                    BadgedBox(badge = { if (hasUnread) Badge(containerColor = MaterialTheme.colorScheme.primary) }) {
+                                        Icon(tab.icon, contentDescription = tab.label)
+                                    }
+                                } else {
                                     Icon(tab.icon, contentDescription = tab.label)
                                 }
-                            } else {
-                                Icon(tab.icon, contentDescription = tab.label)
-                            }
-                        },
-                        label = { Text(tab.label) },
-                    )
+                            },
+                            label = { Text(tab.label) },
+                        )
+                    }
                 }
             }
         }
