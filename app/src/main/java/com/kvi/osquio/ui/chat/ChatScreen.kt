@@ -39,6 +39,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.kvi.osquio.data.model.Message
 import com.kvi.osquio.data.model.User
@@ -538,16 +540,21 @@ private fun MessageGroup(
                 ) {
                     Column {
                         message.imageUrl?.let { url ->
+                            var enlarged by remember { mutableStateOf(false) }
                             AsyncImage(
                                 model = url,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .widthIn(max = 260.dp)
-                                    .heightIn(max = 260.dp)
+                                    .width(220.dp)
+                                    .heightIn(min = 140.dp, max = 280.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .padding(4.dp),
+                                    .padding(4.dp)
+                                    .clickable { enlarged = true },
                             )
+                            if (enlarged) {
+                                FullScreenImageDialog(url = url, onDismiss = { enlarged = false })
+                            }
                         }
                         if (!message.content.isNullOrBlank()) {
                             val annotated = remember(message.content, displayNames, mentionColor, mentionBg, linkColor) {
@@ -592,6 +599,35 @@ private fun MessageGroup(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
             )
+        }
+    }
+}
+
+@Composable
+private fun FullScreenImageDialog(url: String, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            }
         }
     }
 }
