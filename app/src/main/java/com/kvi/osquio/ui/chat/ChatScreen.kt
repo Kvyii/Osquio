@@ -212,7 +212,6 @@ fun ChatScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChatContent(
     messages: List<Message>,
@@ -248,12 +247,10 @@ private fun ChatContent(
 
     val chatItems = remember(messages) { buildChatItems(messages) }
 
+    val reversedItems = remember(chatItems) { chatItems.asReversed() }
+
     val isPinnedToBottom by remember {
-        derivedStateOf {
-            val layout = listState.layoutInfo
-            val last = layout.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-            last.index >= layout.totalItemsCount - 1
-        }
+        derivedStateOf { listState.firstVisibleItemIndex == 0 }
     }
 
     var previousSize by remember { mutableIntStateOf(0) }
@@ -271,20 +268,15 @@ private fun ChatContent(
         }
         val grew = chatItems.size > previousSize
         val delta = chatItems.size - previousSize
-        val isInitialLoad = previousSize == 0
         previousSize = chatItems.size
-        if (isInitialLoad) {
-            listState.scrollToItem(chatItems.size - 1)
-        } else if (grew && isPinnedToBottom) {
-            listState.animateScrollToItem(chatItems.size - 1)
-        } else if (grew && !isPinnedToBottom) {
+        if (grew && !isPinnedToBottom) {
             unseenBelow += delta
         }
     }
 
     LaunchedEffect(lastOwnMessageId) {
         if (lastOwnMessageId != null && chatItems.isNotEmpty()) {
-            listState.animateScrollToItem(chatItems.size - 1)
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -295,13 +287,6 @@ private fun ChatContent(
         }
     }
 
-    val imeVisible = WindowInsets.isImeVisible
-    LaunchedEffect(imeVisible) {
-        if (imeVisible && chatItems.isNotEmpty() && isPinnedToBottom) {
-            listState.animateScrollToItem(chatItems.size - 1)
-        }
-    }
-
     Column(modifier = modifier.fillMaxWidth()) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
@@ -309,8 +294,9 @@ private fun ChatContent(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                reverseLayout = true,
             ) {
-                items(chatItems, key = {
+                items(reversedItems, key = {
                     when (it) {
                         is ChatItem.DateHeader -> "date-${it.date}"
                         is ChatItem.Group -> it.messages.first().id
@@ -337,7 +323,7 @@ private fun ChatContent(
                         .padding(bottom = 12.dp)
                         .clickable {
                             coroutineScope.launch {
-                                listState.animateScrollToItem(chatItems.size - 1)
+                                listState.animateScrollToItem(0)
                             }
                         },
                     shape = RoundedCornerShape(50),
