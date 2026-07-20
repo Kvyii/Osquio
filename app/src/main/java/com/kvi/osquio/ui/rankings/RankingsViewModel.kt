@@ -101,10 +101,7 @@ class RankingsViewModel : ViewModel() {
                     when (response) {
                         "no" -> rejected[user] = (rejected[user] ?: 0) + 1
                         "yes" -> attended[user] = (attended[user] ?: 0) + 1
-                        "yes_at_time" -> {
-                            attended[user] = (attended[user] ?: 0) + 1
-                            maybes[user] = (maybes[user] ?: 0) + 1
-                        }
+                        "yes_at_time" -> maybes[user] = (maybes[user] ?: 0) + 1
                     }
                 }
                 val respondedAt = r.jsonObject["responded_at"]?.jsonPrimitive?.content
